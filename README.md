@@ -1,6 +1,6 @@
 # FanProMAX iOS
 
-当前交付：[0.2.2 启动回退与崩溃定位版](https://github.com/zengwantin-rgb/fanpromax-ios/releases/tag/ios-636c6d2d389a)，编译源码 `636c6d2d389a42e133a72b6e9d02a1d17ae6485b`。[GitHub 托管 macOS 任务](https://github.com/zengwantin-rgb/fanpromax-ios/actions/runs/42699437092)的设备构建、常规/大字号UIKit和发布核对全部成功；195个签名页及IPA CRC通过，云端发布器核对源码一致性和附件摘要。服务器未运行编译、测试或交付验证。0.2.1 已收到 iOS 17.0 真机信号11退出反馈并撤回推荐；0.2.2 的实际手机启动和触摸仍待确认。
+当前交付：[0.2.3 接收器兼容测试版](https://github.com/zengwantin-rgb/fanpromax-ios/releases/tag/ios-8ee16dcbaeb2)，编译源码 `8ee16dcbaeb22cc2ae00b4418d1903aa101a5f0c`。[GitHub 托管 macOS 任务](https://github.com/zengwantin-rgb/fanpromax-ios/actions/runs/42702714898)的设备构建、常规/大字号UIKit和发布核对全部成功；195个签名页及IPA CRC通过，云端发布器核对源码一致性和附件摘要。接收器对象编码兼容、KVC与读回分支测试通过；服务器未运行编译、测试或交付验证。0.2.2 新设备日志中窗口托管返回且约82秒后仍有心跳，触摸事件为0、接收器未接通。0.2.3 的真实设备触摸效果仍待确认。
 
 先停止旧悬浮层，再通过TrollStore覆盖安装。轻点按钮测试收起/恢复，直接拖动按钮测试位置保存；雷达需长按按钮至少0.6秒后松开解锁。测试后保持悬浮层运行，等约2秒，再从工具导出status.json等文件。
 
@@ -44,3 +44,5 @@ iOS 基础来源：用户原仓库 `zwthys-cyber/newstate-ios-port`，快照 `b7
 
 
 0.2.2 新设备反馈：窗口托管及延后初始化返回，约82秒后仍有心跳，日志未显示信号11退出；游戏读取按测试要求关闭。HID/AX/UIKit计数均为0，接收器配置停在 sink_interface_unavailable，尚不能断言是选择器缺失还是参数类型编码被严格比较拒绝。0.2.3 兼容类名、协议名及限定符修饰的对象参数编码，仍拒绝块、指针、标量或错误返回类型；选择器缺失时仅对已知对象字段采用KVC，连接后读回确认。保存真实签名及失败阶段，不扫描系统指令、不推断函数地址，也不宣称真实触摸已修复。原始设备日志不上传。
+
+云端模拟器接口审计：iOS18.6未找到对应setter；这不证明iOS17.0设备的接口情况，模拟器报告明确不假定设备等价。实际手机诊断会记录 setter 是否可用、返回/参数编码、KVC字段类型、连接路径及读回结果。
