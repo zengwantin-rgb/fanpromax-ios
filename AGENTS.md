@@ -24,3 +24,5 @@ Version 0.2.1 has a real-device SIGSEGV (signal 11) report on iOS 17.0 and is wi
 Version 0.2.2 removes system instruction scanning, inferred installer calls and custom UIApplication initialization. Receiver connections occur after window hosting; startup.json preserves stages. Do not claim device startup or touch recovery before actual feedback.
 
 0.2.2 published at ios-636c6d2d389a, compiled SHA 636c6d2d389a42e133a72b6e9d02a1d17ae6485b; hosted run 42699437092 build/UI/publish all succeeded. Native, standard/large-text UIKit, 195 signature pages, CRC and cloud publication source/digest checks passed. Actual device startup/display/touch recovery remains unverified.
+
+New 0.2.2 device logs show hosting and deferred setup returned with a heartbeat about 82 seconds later, sampling intentionally off, and no reported signal-11 exit. HID/AX/UIKit counts remain zero; receiver setup reason is sink_interface_unavailable. Logs lack the actual signature, so do not claim selector absence or annotated encoding as proven cause. 0.2.3 adds object-encoding compatibility, guarded object-ivar KVC, readback and actual signature diagnostics. Actual tap/drag still unverified.

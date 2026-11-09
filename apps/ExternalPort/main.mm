@@ -20,7 +20,7 @@
 extern char **environ;
 static NSString *NSPFolder;
 static NSString *const NSPStop=@"io.github.zengwantin.fanpromax.stop";
-static NSString *const NSPVersion=@"0.2.2";
+static NSString *const NSPVersion=@"0.2.3";
 #ifdef NSP_UI_PREVIEW
 static NSString *const NSPStorage=@"";
 #else
@@ -494,7 +494,7 @@ static void NSPStopCallback(CFNotificationCenterRef center,void *observer,CFStri
         NSMutableDictionary *report=[extra mutableCopy]?:[NSMutableDictionary dictionary];
         report[@"overlay_hidden"]=@(self.widgets.collapsed);report[@"radar_editing"]=@(self.widgets.editing);
         report[@"overlay_interactions"]=@(self.widgets.interactions);report[@"touch_bridge_configured"]=@(NSPTouchBridgeConfigured);
-        report[@"touch_pipeline"]=@{@"setup_revision":@3,@"bootstrap":NSPEventBootstrapReport?:@{},@"event_loop_prepared":@(NSPEventLoopPrepared),@"hid_events":@(NSPHIDEvents.load()),
+        report[@"touch_pipeline"]=@{@"setup_revision":@4,@"bootstrap":NSPEventBootstrapReport?:@{},@"event_loop_prepared":@(NSPEventLoopPrepared),@"hid_events":@(NSPHIDEvents.load()),
             @"ax_decoded":@(NSPAXDecoded.load()),@"ax_failures":@(NSPAXFailures.load()),
             @"ax_delivered":@(self.widgets.axTouches),@"uikit_delivered":@(self.widgets.uiTouches),
             @"events_observed":@(NSPHIDEvents.load()>0 || self.widgets.uiTouches>0 || self.widgets.axTouches>0),

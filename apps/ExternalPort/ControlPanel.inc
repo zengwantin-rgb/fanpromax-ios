@@ -251,7 +251,7 @@ static UIColor *NSPCardColor(void) {return [UIColor colorWithRed:0.075 green:0.1
 }
 - (void)featuresPage {
     [self.content addArrangedSubview:[self label:@"功能进度" size:27 weight:UIFontWeightBold color:UIColor.whiteColor]];
-    [self.content addArrangedSubview:[self label:@"iOS 0.2.2 提供外置显示、筛选和配置迁移。Android APK 的功能不会因安装 IPA 自动获得。" size:13 weight:UIFontWeightRegular color:UIColor.secondaryLabelColor]];
+    [self.content addArrangedSubview:[self label:@"iOS 0.2.3 提供外置显示、筛选和配置迁移。Android APK 的功能不会因安装 IPA 自动获得。" size:13 weight:UIFontWeightRegular color:UIColor.secondaryLabelColor]];
     NSData *data=[NSData dataWithContentsOfFile:[NSBundle.mainBundle pathForResource:@"Features" ofType:@"json"]];
     id entries=data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
     if (![entries isKindOfClass:NSArray.class]) {
@@ -515,6 +515,22 @@ static UIColor *NSPCardColor(void) {return [UIColor colorWithRed:0.075 green:0.1
     NSPPrepareHUDInput(applicationMock,NSPFetcherMock.class);
     check(applicationMock.eventFetcher==firstFetcher && dispatcherMock.eventFetcher==otherFetcher &&
         [NSPEventBootstrapReport[@"reason"] isEqual:@"existing_receivers_differ"],@"conflicting receivers remain unchanged");
+    check(NSPObjectType("@") && NSPObjectType("@\"UIEventDispatcher\"") && NSPObjectType("r@\"<UIEventFetcherSink>\"") &&
+        !NSPObjectType("@?") && !NSPObjectType("^@") && !NSPObjectType("q") && !NSPObjectType(nullptr),
+        @"object ABI accepts class/protocol annotations and qualifiers but rejects blocks, pointers and scalars");
+    for(Class fetcherType in @[NSPQualifiedFetcherMock.class,NSPKVCSinkMock.class]) {
+        applicationMock=[NSPBootstrapApplicationMock new];dispatcherMock=[NSPDispatcherMock new];applicationMock.eventDispatcher=dispatcherMock;
+        NSPPrepareHUDInput(applicationMock,fetcherType);
+        check([NSPEventBootstrapReport[@"fetcher_connected"] boolValue] &&
+            [NSPEventBootstrapReport[@"sink_readback_confirmed"] boolValue] &&
+            [applicationMock.eventFetcher valueForKey:@"eventFetcherSink"]==dispatcherMock,
+            [NSString stringWithFormat:@"%@ connects and confirms sink without run-loop scanning",NSStringFromClass(fetcherType)]);
+    }
+    applicationMock=[NSPBootstrapApplicationMock new];dispatcherMock=[NSPDispatcherMock new];applicationMock.eventDispatcher=dispatcherMock;
+    NSPPrepareHUDInput(applicationMock,NSPInvalidSinkMock.class);
+    check(!applicationMock.eventFetcher && !dispatcherMock.eventFetcher &&
+        [NSPEventBootstrapReport[@"reason"] isEqual:@"sink_signature_incompatible"] &&
+        [NSPEventBootstrapReport[@"sink_argument_type"] isEqual:@"q"],@"incompatible ABI is recorded and never invoked or connected");
     NSPEventLoopPrepared=previousPrepared;NSPEventBootstrapReport=previousBootstrap;
     NSPWidgetLayer *widgets=[[NSPWidgetLayer alloc] initWithFrame:CGRectMake(0,0,844,390)];
     NSPCanvas *testCanvas=[[NSPCanvas alloc] initWithFrame:widgets.bounds];widgets.canvas=testCanvas;

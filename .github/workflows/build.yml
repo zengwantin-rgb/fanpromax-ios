@@ -32,7 +32,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "ios-${GITHUB_SHA:0:12}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title 'FanProMAX iOS 0.2.2 · 启动回退与崩溃定位版' --notes '目标：iPhone 15 Pro Max / iOS 17.0 / TrollStore。撤回0.2.1系统指令扫描与自定义UIApplication启动，恢复原窗口启动方式；接收器连接延后，并新增startup.json。实际手机启动及轻点/拖动效果仍待确认。保留显示、雷达、筛选及配置迁移。自瞄和压枪排除；不是APK全功能转换，其他写入类功能尚未移植。新应用身份下的实际读取与跨应用悬浮须设备验证。' out/FanProMAX-iOS.ipa out/package-report.json out/SHA256SUMS out/FanProMAX-README.zh-CN.md out/FanProMAX-ThirdPartyNotices.txt out/apk-features.json
+          gh release create "ios-${GITHUB_SHA:0:12}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title 'FanProMAX iOS 0.2.3 · 接收器兼容测试版' --notes '目标：iPhone 15 Pro Max / iOS 17.0 / TrollStore。兼容接收器对象参数的类名/协议名编码；KVC路径限定对象字段，连接后读回确认，记录实际接口签名。保留0.2.2启动回退与startup.json。实际手机启动及轻点/拖动效果仍待确认。保留显示、雷达、筛选及配置迁移。自瞄和压枪排除；不是APK全功能转换，其他写入类功能尚未移植。新应用身份下的实际读取与跨应用悬浮须设备验证。' out/FanProMAX-iOS.ipa out/package-report.json out/SHA256SUMS out/FanProMAX-README.zh-CN.md out/FanProMAX-ThirdPartyNotices.txt out/apk-features.json
   ui:
     if: ${{ !inputs.checked_run }}
     runs-on: macos-15-intel
