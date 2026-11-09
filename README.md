@@ -1,6 +1,10 @@
 # FanProMAX iOS
 
-当前交付：[下载 0.2.0 IPA](https://github.com/zengwantin-rgb/fanpromax-ios/releases/tag/ios-13fb52fc28d6)。源码 `13fb52fc28d6526cc5cc8492db5737889ec68274`；[GitHub 托管 macOS 构建、界面与发布检查](https://github.com/zengwantin-rgb/fanpromax-ios/actions/runs/42685218087)均成功。设备包185个签名页及CRC通过，显示策略模型与常规/大字号UIKit检查通过；发布任务在云端核对原构建、UI及附件摘要后发布。服务器没有运行本轮编译、测试或交付验证脚本。
+当前交付：[0.2.1 触摸与拖动修复测试版](https://github.com/zengwantin-rgb/fanpromax-ios/releases/tag/ios-b45a0d970b80)，源码 `b45a0d970b808b4e959f331e97e86752e4f135f8`。[最终云端任务](https://github.com/zengwantin-rgb/fanpromax-ios/actions/runs/42694315282)的设备构建、UIKit和发布核对全部成功。原生查找模型、44项常规/大字号UI检查、195个签名页和IPA CRC通过。发布时在GitHub托管macOS核对源码一致性及附件摘要；工作服务器没有运行编译或验证。此前模拟器等待/预览启动问题已修正，未绕过检查。实际手机轻点和拖动修复仍待确认。
+
+先停止旧悬浮层，再通过TrollStore覆盖安装。轻点按钮测试收起/恢复，直接拖动按钮测试位置保存；雷达需长按按钮至少0.6秒后松开解锁。测试后保持悬浮层运行，等约2秒，再从工具导出status.json等文件。
+
+历史交付：[下载 0.2.0 IPA](https://github.com/zengwantin-rgb/fanpromax-ios/releases/tag/ios-13fb52fc28d6)。源码 `13fb52fc28d6526cc5cc8492db5737889ec68274`；[GitHub 托管 macOS 构建、界面与发布检查](https://github.com/zengwantin-rgb/fanpromax-ios/actions/runs/42685218087)均成功。设备包185个签名页及CRC通过，显示策略模型与常规/大字号UIKit检查通过；发布任务在云端核对原构建、UI及附件摘要后发布。服务器没有运行本轮编译、测试或交付验证脚本。
 
 升级前先停止旧版悬浮层，再通过TrollStore覆盖安装，并重新启动悬浮层和游戏读取。「显示」可开启忽略人机、调节标记距离及人数；「工具」可导出/导入显示配置。用户已确认0.2.0在15PM／iOS17.0的大厅中悬浮层可见，但随后更正为不能拖动，轻点也无效；同批状态支持游戏读取端口、相机及采样工作。对局目标显示与其他新显示功能仍待确认。
 
