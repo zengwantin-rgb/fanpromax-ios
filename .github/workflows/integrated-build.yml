@@ -1,0 +1,77 @@
+name: Build integrated movement and vehicle experiment
+on:
+  push:
+    branches: [analysis/integrated-controls]
+    paths: [apps/Integrated/**, tests/integrated_*.cpp, scripts/*integrated*, .github/workflows/integrated-build.yml]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15-intel
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Test restoration and stale-object handling on hosted macOS
+        run: |
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          mkdir -p build out/integrated
+          set -o pipefail
+          for test_name in field flight; do
+            xcrun clang++ -std=c++17 -Wall -Wextra -Werror -UNDEBUG -fsanitize=address,undefined -Iapps/Integrated "tests/integrated_${test_name}_tests.cpp" -o "build/integrated-${test_name}-tests"
+            "build/integrated-${test_name}-tests" | tee "out/integrated/${test_name}-tests.txt"
+          done
+      - name: Download pinned original input
+        env:
+          GH_TOKEN: ${{ secrets.SOURCE_INPUT_TOKEN }}
+        run: |
+          mkdir -p input
+          gh release download input-newstate-0.9.98-804 --repo zwthys-cyber/newstate-ios-port --pattern NEW_STATE_Decrypted.ipa --dir input
+      - name: Validate profile, compile, sign and verify module and game package
+        run: |
+          python3 -m venv build/integrated-venv
+          build/integrated-venv/bin/python -m pip install --only-binary=:all: capstone==5.0.6
+          build/integrated-venv/bin/python scripts/integrated-profile.py input/NEW_STATE_Decrypted.ipa
+          module_sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos clang++ -arch arm64 -isysroot "$module_sdk" -miphoneos-version-min=17.0 -std=c++17 -O2 -Wall -Wextra -Werror -fobjc-arc -fblocks -fvisibility=hidden -Isrc -Iapps/Integrated -Ibuild -dynamiclib src/PortCore.cpp apps/Integrated/CollisionProbe.cpp apps/Integrated/Runtime.mm -framework UIKit -framework Foundation -Wl,-dead_strip -Wl,-install_name,@executable_path/Frameworks/FanProIntegrated.dylib -o out/integrated/FanProIntegrated.dylib
+          codesign --force --sign - --timestamp=none --pagesize 4096 out/integrated/FanProIntegrated.dylib
+          codesign --verify --strict out/integrated/FanProIntegrated.dylib
+          build/integrated-venv/bin/python scripts/package-integrated.py input/NEW_STATE_Decrypted.ipa out/integrated/FanProIntegrated.dylib
+          rm -rf input build/integrated-package
+      - name: Stage verified game package as private draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "integrated-${GITHUB_SHA:0:12}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title 'FanProMAX 内置 i1 · 人物加速与飞车试验' --notes '15PM / iOS17.0 / TrollStore；原游戏0.9.98(804)。人物速度字段1–3倍、载具重力/垂直速度控制，默认关闭。真实净速度、网络回拉、飞车效果及游戏启动待手机确认。无敌与减伤尚未实现；不含自瞄与压枪。外置显示App仍单独保留。本包没有移入旧自瞄、压枪或警告补丁。' out/integrated/*
+  ui:
+    runs-on: macos-15-intel
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Check integrated UIKit controls
+        run: |
+          if test -d /Applications/Xcode_16.4.app/Contents/Developer; then export DEVELOPER_DIR=/Applications/Xcode_16.4.app/Contents/Developer; fi
+          bash scripts/integrated-ui.sh
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: integrated-ui-${{ github.sha }}
+          path: out/integrated-ui/
+          if-no-files-found: error
+  publish:
+    needs: [build, ui]
+    runs-on: macos-15-intel
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - name: Verify reports and asset digest before publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/integrated-publish.py
