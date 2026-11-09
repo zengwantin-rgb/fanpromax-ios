@@ -1,5 +1,7 @@
 # FanProMAX 内置控制试验 i1
 
+[下载内置 i1 IPA](https://github.com/zengwantin-rgb/fanpromax-ios/releases/tag/integrated-9ac6158aaa63)。编译源码 `9ac6158aaa63d547e21aebf6cbbb4fd1162c27d5`；[云端任务](https://github.com/zengwantin-rgb/fanpromax-ios/actions/runs/42710519212)的构建、UIKit和发布全部成功。设备启动、实际净速度和飞车效果仍未验证。
+
 用户已选择将功能内置到游戏IPA，目标为15PM／iOS17.0／TrollStore。自瞄和压枪继续排除。
 
 本模块和原外置显示App独立。内置按钮通过游戏自己的UIKit窗口响应轻点和拖动；外置显示和雷达暂时仍由原App提供，没有移入任何旧自瞄/压枪或警告处理模块。
