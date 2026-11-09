@@ -1,6 +1,6 @@
 # FanProMAX iOS
 
-0.2.1 已收到 iOS 17.0 真机 SIGSEGV（信号 11）反馈，撤回推荐。0.2.2 正在云端构建：移除系统指令扫描，恢复通用 UIApplication 启动，延后接收器连接并新增 startup.json。实际手机启动和触摸仍需确认。
+当前交付：[0.2.2 启动回退与崩溃定位版](https://github.com/zengwantin-rgb/fanpromax-ios/releases/tag/ios-636c6d2d389a)，编译源码 `636c6d2d389a42e133a72b6e9d02a1d17ae6485b`。[GitHub 托管 macOS 任务](https://github.com/zengwantin-rgb/fanpromax-ios/actions/runs/42699437092)的设备构建、常规/大字号UIKit和发布核对全部成功；195个签名页及IPA CRC通过，云端发布器核对源码一致性和附件摘要。服务器未运行编译、测试或交付验证。0.2.1 已收到 iOS 17.0 真机信号11退出反馈并撤回推荐；0.2.2 的实际手机启动和触摸仍待确认。
 
 先停止旧悬浮层，再通过TrollStore覆盖安装。轻点按钮测试收起/恢复，直接拖动按钮测试位置保存；雷达需长按按钮至少0.6秒后松开解锁。测试后保持悬浮层运行，等约2秒，再从工具导出status.json等文件。
 

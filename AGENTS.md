@@ -22,3 +22,5 @@ For 0.2.0 on iPhone 15 Pro Max / iOS 17.0, the user confirms the lobby overlay i
 Version 0.2.1 has a real-device SIGSEGV (signal 11) report on iOS 17.0 and is withdrawn from recommendation. No stack trace was provided; the last status was window registration. Version 0.2.1 was published at ios-b45a0d970b80 after hosted build/UI/publication checks. It repairs the input bootstrap and adds input/drag persistence diagnostics; actual device tap/drag repair remains unverified. Do not turn the model or simulator pass into a device-success claim.
 
 Version 0.2.2 removes system instruction scanning, inferred installer calls and custom UIApplication initialization. Receiver connections occur after window hosting; startup.json preserves stages. Do not claim device startup or touch recovery before actual feedback.
+
+0.2.2 published at ios-636c6d2d389a, compiled SHA 636c6d2d389a42e133a72b6e9d02a1d17ae6485b; hosted run 42699437092 build/UI/publish all succeeded. Native, standard/large-text UIKit, 195 signature pages, CRC and cloud publication source/digest checks passed. Actual device startup/display/touch recovery remains unverified.
