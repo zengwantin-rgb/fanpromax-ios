@@ -19,8 +19,8 @@ gh('release','download',tag,'--repo',repo,'--pattern','package-report.json','--p
 report=json.loads((root/'package-report.json').read_text());assert report['commit']==sha
 assert report['archive_crc_verified'] and report['entitlements_verified'] and report['signature_pages_verified']>0
 assert not report['full_android_feature_port'] and not report['new_bundle_device_verified']
-release=json.loads(gh('release','view',tag,'--repo',repo,'--json','databaseId'))
-asset=api(f'repos/{repo}/releases/{release["databaseId"]}')
+release=json.loads(gh('release','view',tag,'--repo',repo,'--json','apiUrl'))
+asset=api(release['apiUrl'])
 ipa=next(a for a in asset['assets'] if a['name']==report['file'])
 assert ipa['size']==report['bytes'] and ipa['digest']=='sha256:'+report['sha256']
 assert (root/'SHA256SUMS').read_text().strip()==f"{report['sha256']}  {report['file']}"
