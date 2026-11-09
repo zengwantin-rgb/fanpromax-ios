@@ -14,3 +14,7 @@ The user explicitly prohibits compilation and validation on the workspace server
 Target: iPhone 15 Pro Max, iOS 17.0, TrollStore; GitHub owner zengwantin-rgb.
 The user explicitly excludes aiming/aimbot and recoil compensation. Do not implement those features.
 Do not represent unported Android features or unresolved game-control permissions as implemented.
+
+# Device evidence to preserve
+
+For 0.2.0 on iPhone 15 Pro Max / iOS 17.0, the user confirms the lobby overlay is visible and accepts taps/drags. Device reports acquire the game's read port and camera with no read error. The lobby snapshot has no remote target markers; do not treat that as failed sampling. The `event_loop_prepared` flag describes only the dispatcher/fetcher setup branch, not overall touch functionality. Do not change the functioning touch path based solely on that flag. Game control still returns 5 and no game memory was written. Real-match target display remains unverified. Never upload raw device reports.
