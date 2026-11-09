@@ -4,10 +4,20 @@ on:
     branches: [main]
     paths: [apps/**, src/**, tests/**, scripts/**, .github/workflows/build.yml, README.md]
   workflow_dispatch:
+    inputs:
+      checked_run:
+        description: Reuse an existing successful device/UI run
+        required: false
+        type: string
+      checked_sha:
+        description: Source SHA corresponding to checked_run
+        required: false
+        type: string
 permissions:
   contents: read
 jobs:
   build:
+    if: ${{ !inputs.checked_run }}
     runs-on: macos-15-intel
     timeout-minutes: 20
     permissions:
@@ -24,6 +34,7 @@ jobs:
         run: |
           gh release create "ios-${GITHUB_SHA:0:12}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title 'FanProMAX iOS 0.1.0 · 巨魔外置显示基础版' --notes '目标：iPhone 15 Pro Max / iOS 17.0 / TrollStore。提供独立显示、雷达与诊断；不是APK全功能转换，自瞄/追踪/写入等尚未移植。新应用身份下的实际读取与跨应用悬浮须设备验证。' out/FanProMAX-iOS.ipa out/package-report.json out/SHA256SUMS out/FanProMAX-README.zh-CN.md out/FanProMAX-ThirdPartyNotices.txt out/apk-features.json
   ui:
+    if: ${{ !inputs.checked_run }}
     runs-on: macos-15-intel
     timeout-minutes: 25
     steps:
@@ -43,17 +54,21 @@ jobs:
           path: out/FanProMAX-UI-preview.zip
           if-no-files-found: error
   publish:
+    if: ${{ always() && ((needs.build.result == 'success' && needs.ui.result == 'success') || inputs.checked_run) }}
     needs: [build, ui]
     runs-on: macos-15-intel
     timeout-minutes: 5
     permissions:
       contents: write
+      actions: read
     steps:
-      - name: Attach UIKit report and publish
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify checked source and publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p reports
-          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "fanpromax-ui-$GITHUB_SHA" --dir reports
-          gh release upload "ios-${GITHUB_SHA:0:12}" --repo "$GITHUB_REPOSITORY" reports/FanProMAX-UI-preview.zip
-          gh release edit "ios-${GITHUB_SHA:0:12}" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease
+          CHECKED_SHA: ${{ inputs.checked_sha || github.sha }}
+          CHECKED_RUN: ${{ inputs.checked_run || github.run_id }}
+        run: python3 scripts/publish-checked.py
