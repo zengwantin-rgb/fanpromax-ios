@@ -88,6 +88,7 @@ print(json.dumps(result,ensure_ascii=False,indent=2))
 PY
 for task_page in 0 1 2 3; do
   xcrun simctl terminate "$task_sim_id" io.github.zengwantin.fanpromax.preview || true
+  sleep 2
   rm -f "$task_ui_ready"
   xcrun simctl launch "$task_sim_id" io.github.zengwantin.fanpromax.preview --nsp-page "$task_page"
   wait_ui_ready

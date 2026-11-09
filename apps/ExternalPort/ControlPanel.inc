@@ -135,10 +135,6 @@ static UIColor *NSPCardColor(void) {return [UIColor colorWithRed:0.075 green:0.1
         [self.content.widthAnchor constraintLessThanOrEqualToAnchor:self.scroll.frameLayoutGuide.widthAnchor constant:-36]]];
     NSLayoutConstraint *width=[self.content.widthAnchor constraintEqualToAnchor:self.scroll.frameLayoutGuide.widthAnchor constant:-36];
     width.priority=UILayoutPriorityDefaultHigh;width.active=YES;
-#ifdef NSP_UI_PREVIEW
-    NSArray *arguments=NSProcessInfo.processInfo.arguments;NSUInteger index=[arguments indexOfObject:@"--nsp-page"];
-    if (index!=NSNotFound && index+1<arguments.count) self.pages.selectedSegmentIndex=[arguments[index+1] integerValue];
-#endif
     [self renderPage];__weak NSPControl *weak=self;
     self.timer=[NSTimer scheduledTimerWithTimeInterval:1 repeats:YES block:^(NSTimer *timer) {(void)timer;[weak refresh];}];
     [self save];[self refresh];
@@ -161,6 +157,14 @@ static UIColor *NSPCardColor(void) {return [UIColor colorWithRed:0.075 green:0.1
 #ifdef NSP_UI_PREVIEW
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
+    // Preview navigation follows the real app: make its window visible first.
+    NSArray *arguments=NSProcessInfo.processInfo.arguments;NSUInteger index=[arguments indexOfObject:@"--nsp-page"];
+    if (index!=NSNotFound && index+1<arguments.count) {
+        NSInteger page=[arguments[index+1] integerValue];
+        if (page>=0 && page<self.pages.numberOfSegments && self.pages.selectedSegmentIndex!=page) {
+            self.pages.selectedSegmentIndex=page;[self renderPage];
+        }
+    }
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW,NSEC_PER_SEC/2),dispatch_get_main_queue(),^{
         [self.view layoutIfNeeded];
         NSPWriteJSON(@"ui-ready.json",@{@"page":@(self.pages.selectedSegmentIndex),@"time":@(NSDate.date.timeIntervalSince1970)});
