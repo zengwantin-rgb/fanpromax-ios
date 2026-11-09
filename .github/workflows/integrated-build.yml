@@ -24,6 +24,11 @@ jobs:
             xcrun clang++ -std=c++17 -Wall -Wextra -Werror -UNDEBUG -fsanitize=address,undefined -Iapps/Integrated "tests/integrated_${test_name}_tests.cpp" -o "build/integrated-${test_name}-tests"
             "build/integrated-${test_name}-tests" | tee "out/integrated/${test_name}-tests.txt"
           done
+      - name: Test verified local ownership and controller pinning
+        run: |
+          set -o pipefail
+          xcrun clang++ -std=c++17 -Wall -Wextra -Werror -UNDEBUG -fsanitize=address,undefined -Isrc -Iapps/Integrated src/PortCore.cpp apps/Integrated/CollisionProbe.cpp tests/integrated_context_tests.cpp -o build/integrated-context-tests
+          build/integrated-context-tests | tee out/integrated/context-tests.txt
       - name: Download pinned original input
         env:
           GH_TOKEN: ${{ secrets.SOURCE_INPUT_TOKEN }}
@@ -45,7 +50,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "integrated-${GITHUB_SHA:0:12}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title 'FanProMAX 内置 i1 · 人物加速与飞车试验' --notes '15PM / iOS17.0 / TrollStore；原游戏0.9.98(804)。人物速度字段1–3倍、载具重力/垂直速度控制，默认关闭。真实净速度、网络回拉、飞车效果及游戏启动待手机确认。无敌与减伤尚未实现；不含自瞄与压枪。外置显示App仍单独保留。本包没有移入旧自瞄、压枪或警告补丁。' out/integrated/*
+          gh release create "integrated-${GITHUB_SHA:0:12}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title 'FanProMAX 内置 i2 · 人物加速与飞车试验' --notes '15PM / iOS17.0 / TrollStore；原游戏0.9.98(804)。先验证本地玩家身份再固定控制器，新增识别阶段、存活、移动模式和当前资格诊断；身份暂失保留恢复记录。人物速度字段1–3倍、载具重力/垂直速度控制，默认关闭。真实净速度、网络回拉、飞车效果及游戏启动待手机确认。无敌与减伤尚未实现；不含自瞄与压枪。外置显示App仍单独保留。本包没有移入旧自瞄、压枪或警告补丁。' out/integrated/*
   ui:
     runs-on: macos-15-intel
     timeout-minutes: 25

@@ -4,6 +4,7 @@
 #include "CollisionRuntimeRead.hpp"
 #include "FieldLease.hpp"
 #include "FlightLease.hpp"
+#include "LocalController.hpp"
 #ifndef FANPRO_UI_PREVIEW
 #include "VerifiedProfile.hpp"
 #else
@@ -28,6 +29,9 @@ fanpro::FieldLease walkLease,crouchLease;
 uint64_t currentWorld{};
 NSString *lastOutcome=@"尚未修改";
 NSString *profileError;
+NSDictionary *contextDiagnostics;NSString *cleanupOutcome=@"none";
+NSTimeInterval lastSpeedWriteTime{};
+uint64_t localVerifiedFrames{},characterReadyFrames{},eligibleSpeedFrames{};
 NSString *lastFailure;NSTimeInterval lastFailureTime{};
 uint64_t taskCount{},speedWrites{};
 NSTimeInterval lastLog{};
@@ -107,7 +111,10 @@ static const char *resultName(fanpro::FieldResult result) {
 static bool failed(fanpro::FieldResult result){return result!=fanpro::FieldResult::off && result!=fanpro::FieldResult::applied && result!=fanpro::FieldResult::unchanged;}
 static void record(NSString *phase) {
     if(!folder)return;
-    NSDictionary *value=@{@"version":@"integrated-i1",@"phase":phase,@"time":@(NSDate.date.timeIntervalSince1970),
+    NSDictionary *value=@{@"version":@"integrated-i2",@"phase":phase,@"time":@(NSDate.date.timeIntervalSince1970),
+        @"context":contextDiagnostics?:@{},@"cleanup_outcome":cleanupOutcome,
+        @"last_speed_write_time":@(lastSpeedWriteTime),@"local_verified_frames":@(localVerifiedFrames),
+        @"character_ready_frames":@(characterReadyFrames),@"eligible_speed_frames":@(eligibleSpeedFrames),
         @"profile_ready":@(ready),@"last_failure":lastFailure?:@"",@"last_failure_time":@(lastFailureTime),@"profile_error":profileError?:@"",@"speed_requested":@(speedRequested.load()),
         @"selected_multiplier":@(speedTenths.load()/10.0),@"speed_field_outcome":lastOutcome?:@"",
         @"flight_requested":@(flightRequested.load()),@"flight_outcome":flightOutcome?:@"",
@@ -130,37 +137,78 @@ static bool validTaskClass(Class cls) {
         taskMethod(cls,sel_registerName("ProcessAsyncTasks"),0x3b780d4,"v16@0:8",true) &&
         taskMethod(cls,sel_registerName("CheckForCompletion"),0x3b7809c,"B16@0:8",false);
 }
+static bool ownedCharacter(const local::LocalController &local,CollisionContext &out) {
+    if(!local.verified)return false;
+    for(uint64_t field:{0x370ULL,0x2e0ULL}) {
+        uint64_t pawn=memory.encodedPointer(local.controller+field);uint8_t dead{};fanpro::Identity key;
+        if(!pawn || !isA(memory,memory.encodedPointer(pawn+0x30),memory.pointer(memory.base+0x7f2c5b0)) ||
+            !identity(pawn,local.world,key) || !memory.get(pawn+0x930,dead) || (dead&1))continue;
+        if(memory.encodedPointer(local.controller+field)!=pawn)continue;
+        out.world=local.world;out.controller=local.controller;out.pawn=pawn;return true;
+    }
+    return false;
+}
 static void perform(uint64_t revision) {
     ++taskCount;writeRevision=revision;restoringFields=false;CollisionContext target;
-    const auto observation=observeCollision(memory,textBegin,textEnd,&target);
-    currentWorld=target.world;
-    uint8_t dead{};
-    bool valid=observation.stage==CollisionObservation::Stage::ready && target.generationsValid &&
-        target.pawn && memory.get(target.pawn+0x930,dead) && !(dead&1);
+    const auto local=local::readLocalController(memory);
+    CollisionObservation observation;
+    if(local.verified)observation=observeCollision(memory,textBegin,textEnd,&target,local.controller);
+    // Losing a transient ownership observation must not discard restoration baselines.
+    currentWorld=local.verified ? local.world : 0;
+    uint8_t dead{};bool aliveReadable=target.pawn && memory.get(target.pawn+0x930,dead);
+    bool valid=local.verified && observation.stage==CollisionObservation::Stage::ready && target.generationsValid && aliveReadable && !(dead&1);
+    if(local.verified)++localVerifiedFrames;
+    if(valid)++characterReadyFrames;
     bool wanted=speedRequested.load() && revision==requestRevision.load() && valid && observation.movementMode==1;
+    NSMutableDictionary *details=[@{@"local_controller_verified":@(local.verified),@"local_controller_reason":@(local.reason),
+        @"controllers_seen":@(local.controllers),@"owned_controllers":@(local.ownedControllers),
+        @"character_stage":local.verified ? @(collisionStageName(observation.stage)) : @"not_observed_without_owned_controller",
+        @"character_generations_valid":@(target.generationsValid),@"alive_readable":@(aliveReadable),
+        @"character_alive":@(aliveReadable && !(dead&1)),@"movement_mode":@(observation.movementMode),
+        @"speed_eligible":@(wanted)} mutableCopy];
+    float field{};
+    if(valid && memory.get(target.movement+0x6dc,field) && std::isfinite(field))details[@"walking_speed_field"]=@(field);
+    if(valid && memory.get(target.movement+0x420,field) && std::isfinite(field))details[@"crouching_speed_field"]=@(field);
+    contextDiagnostics=details;
     if(!wanted) {
-        restoringFields=true;auto a=walkLease.restore(fieldAccess),b=crouchLease.restore(fieldAccess);
-        lastOutcome=valid ? [NSString stringWithFormat:@"%s / %s",resultName(a),resultName(b)] : @"等待有效步行角色";
+        if(local.verified) {
+            restoringFields=true;auto a=walkLease.restore(fieldAccess),b=crouchLease.restore(fieldAccess);
+            cleanupOutcome=[NSString stringWithFormat:@"speed %s / %s",resultName(a),resultName(b)];
+        } else cleanupOutcome=@"deferred_until_local_identity_returns";
+        if(!speedRequested.load())lastOutcome=@"speed_disabled";
+        else if(!local.verified)lastOutcome=[@"waiting_local_player: " stringByAppendingString:@(local.reason)];
+        else if(!valid)lastOutcome=[NSString stringWithFormat:@"character_not_ready: %s; generations=%d; alive=%d",collisionStageName(observation.stage),target.generationsValid,aliveReadable && !(dead&1)];
+        else lastOutcome=[NSString stringWithFormat:@"movement_mode_%u_or_request_changed",unsigned(observation.movementMode)];
     } else {
+        ++eligibleSpeedFrames;
         fanpro::Identity key{target.movement,target.items[1],target.world,target.serials[1]};
         float multiplier=speedTenths.load()/10.0f;
         auto a=walkLease.apply(fieldAccess,key,0x6dc,multiplier);
         auto b=failed(a) ? fanpro::FieldResult::off : crouchLease.apply(fieldAccess,key,0x420,multiplier);
         if(a==fanpro::FieldResult::applied)++speedWrites;
         if(b==fanpro::FieldResult::applied)++speedWrites;
+        if(a==fanpro::FieldResult::applied || b==fanpro::FieldResult::applied)lastSpeedWriteTime=NSDate.date.timeIntervalSince1970;
         lastOutcome=[NSString stringWithFormat:@"%s / %s",resultName(a),resultName(b)];
         if(failed(a) || failed(b)) {lastFailure=[@"speed: " stringByAppendingString:lastOutcome];lastFailureTime=NSDate.date.timeIntervalSince1970;speedRequested.store(false);restoringFields=true;walkLease.restore(fieldAccess);crouchLease.restore(fieldAccess);record(@"speed_failure");}
     }
-    fanpro::Identity vehicleRoot;
-    bool flightWanted=flightRequested.load() && revision==requestRevision.load() && valid;
-    if(flightWanted && currentVehicle(target,vehicleRoot)) {
+    fanpro::Identity vehicleRoot;CollisionContext carrier;
+    bool flightWanted=flightRequested.load() && revision==requestRevision.load() && local.verified;
+    bool carrierReady=ownedCharacter(local,carrier);
+    details[@"flight_carrier_ready"]=@(carrierReady);
+    if(flightWanted && carrierReady && currentVehicle(carrier,vehicleRoot)) {
         if(!flightLease.active())record(@"flight_first_call_begin");
         auto result=flightLease.apply(physics,vehicleRoot,flightDirection.load());flightOutcome=@(resultName(result));
         if(failed(result)){lastFailure=[@"flight: " stringByAppendingString:flightOutcome];lastFailureTime=NSDate.date.timeIntervalSince1970;flightRequested.store(false);flightLease.restore(physics);record(@"flight_failure");}
     } else {
-        if(flightLease.active())record(@"flight_restore_begin");
-        auto result=flightLease.restore(physics);
-        flightOutcome=flightWanted ? @"等待当前乘坐载具" : @(resultName(result));
+        if(local.verified) {
+            if(flightLease.active())record(@"flight_restore_begin");
+            auto result=flightLease.restore(physics);cleanupOutcome=[cleanupOutcome stringByAppendingFormat:@"; flight %s",resultName(result)];
+        }
+        if(!flightRequested.load())flightOutcome=@"flight_disabled";
+        else if(!local.verified)flightOutcome=[@"waiting_local_player: " stringByAppendingString:@(local.reason)];
+        else if(!carrierReady)flightOutcome=@"waiting_owned_alive_character";
+        else if(revision!=requestRevision.load())flightOutcome=@"request_changed";
+        else flightOutcome=@"waiting_ridden_vehicle";
     }
     NSTimeInterval now=NSDate.date.timeIntervalSince1970;
     if(now-lastLog>=1){lastLog=now;record(@"game_task_returned");}
@@ -191,7 +239,7 @@ static void perform(uint64_t revision) {
         self.card=[UIScrollView new];self.card.backgroundColor=[UIColor colorWithWhite:0.06 alpha:0.95];self.card.layer.cornerRadius=16;self.card.hidden=YES;
         [self.card addSubview:self.content];[self addSubview:self.card];[self bringSubviewToFront:self.launcher];
         UILabel *(^label)(NSString *)=^UILabel *(NSString *text){UILabel *l=[UILabel new];l.text=text;l.textColor=UIColor.whiteColor;l.numberOfLines=0;l.font=[UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];l.adjustsFontForContentSizeCategory=YES;return l;};
-        [self.content addArrangedSubview:label(@"FanProMAX · 内置试验 i1")];
+        [self.content addArrangedSubview:label(@"FanProMAX · 内置试验 i2")];
         UIStackView *row=[UIStackView new];row.axis=UILayoutConstraintAxisHorizontal;row.distribution=UIStackViewDistributionEqualSpacing;
         [row addArrangedSubview:label(@"人物加速（待实测）")];self.speed=[UISwitch new];self.speed.enabled=ready;
         [self.speed addTarget:self action:@selector(speedChanged:) forControlEvents:UIControlEventValueChanged];[row addArrangedSubview:self.speed];
@@ -236,7 +284,7 @@ static void perform(uint64_t revision) {
     uint64_t revision=requestRevision.load();__weak FanProIntegratedPanel *weak=self;
     bool (^block)(void)=^bool {
         @autoreleasepool {perform(revision);NSString *outcome=[NSString stringWithFormat:@"人物：%@\n载具：%@",lastOutcome,flightOutcome];BOOL requested=speedRequested.load(),flying=flightRequested.load();
-            dispatch_async(dispatch_get_main_queue(),^{FanProIntegratedPanel *panel=weak;if(panel){panel.speed.on=requested;panel.flight.on=flying;panel.status.text=outcome;}pendingTask.store(false);});}
+            dispatch_async(dispatch_get_main_queue(),^{FanProIntegratedPanel *panel=weak;if(panel){panel.speed.on=requested;panel.flight.on=flying;panel.status.text=outcome;[panel setNeedsLayout];}pendingTask.store(false);});}
         return true;
     };
     reinterpret_cast<void (*)(id,SEL,bool (^)(void))>(objc_msgSend)(cls,sel_registerName("CreateTaskWithBlock:"),block);
