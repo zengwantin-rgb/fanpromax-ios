@@ -1,6 +1,6 @@
 # FanProMAX 内置控制试验 i1
 
-i2 正在云端构建。i1 新设备日志显示任务队列运行、累计22次速度字段写入，但存活步行时角色识别失败，飞车调用为0。累计写入不代表当前有效倍速。
+[下载内置 i2 IPA及模块](https://github.com/zengwantin-rgb/fanpromax-ios/releases/tag/integrated-c1f92ca3f01d)。编译源码 `c1f92ca3f01d6dcbb732907db73b90e958321dd9`；[云端构建、控制器归属回归、UIKit和发布](https://github.com/zengwantin-rgb/fanpromax-ios/actions/runs/42714212191)全部通过，真机修复效果待确认。i1 新设备日志显示任务队列运行、累计22次速度字段写入，但存活步行时角色识别失败，飞车调用为0。累计写入不代表当前有效倍速。
 
 用户已选择将功能内置到游戏IPA，目标为15PM／iOS17.0／TrollStore。自瞄和压枪继续排除。
 
@@ -16,3 +16,6 @@ i2 正在云端构建。i1 新设备日志显示任务队列运行、累计22次
 
 
 i2先通过游戏实例的LocalPlayers和Controller.Player确认本地控制器，再将它固定到当前世界的有效弱引用，不再要求世界中只有一个控制器。新增每帧识别阶段、本地归属、对象代数、存活读取、移动模式、速度资格和最后写入时间。身份暂时不可读时保留恢复基线，避免再次捕获已放大的值；角色识别失败或未乘车不会再显示为飞车成功恢复。真实修复效果仍需手机验证。
+
+
+自行注入时以本版FanProIntegrated.dylib替换旧模块后重启游戏；完整IPA已经包含本版模块。先在存活步行状态选择3倍并前进约10秒，再导出integrated-status.json，确认version为integrated-i2。飞车另在乘坐载具时测试；步行期间flight_calls为0并不表示飞车故障。
