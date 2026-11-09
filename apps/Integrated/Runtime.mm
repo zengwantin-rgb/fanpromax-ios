@@ -149,20 +149,20 @@ static bool ownedCharacter(const local::LocalController &local,CollisionContext 
     return false;
 }
 static void perform(uint64_t revision) {
-    ++taskCount;writeRevision=revision;restoringFields=false;CollisionContext target;
-    const auto local=local::readLocalController(memory);
+    ++taskCount;cleanupOutcome=@"none";writeRevision=revision;restoringFields=false;CollisionContext target;
+    const auto owner=local::readLocalController(memory);
     CollisionObservation observation;
-    if(local.verified)observation=observeCollision(memory,textBegin,textEnd,&target,local.controller);
+    if(owner.verified)observation=observeCollision(memory,textBegin,textEnd,&target,owner.controller);
     // Losing a transient ownership observation must not discard restoration baselines.
-    currentWorld=local.verified ? local.world : 0;
+    currentWorld=owner.verified ? owner.world : 0;
     uint8_t dead{};bool aliveReadable=target.pawn && memory.get(target.pawn+0x930,dead);
-    bool valid=local.verified && observation.stage==CollisionObservation::Stage::ready && target.generationsValid && aliveReadable && !(dead&1);
-    if(local.verified)++localVerifiedFrames;
+    bool valid=owner.verified && observation.stage==CollisionObservation::Stage::ready && target.generationsValid && aliveReadable && !(dead&1);
+    if(owner.verified)++localVerifiedFrames;
     if(valid)++characterReadyFrames;
     bool wanted=speedRequested.load() && revision==requestRevision.load() && valid && observation.movementMode==1;
-    NSMutableDictionary *details=[@{@"local_controller_verified":@(local.verified),@"local_controller_reason":@(local.reason),
-        @"controllers_seen":@(local.controllers),@"owned_controllers":@(local.ownedControllers),
-        @"character_stage":local.verified ? @(collisionStageName(observation.stage)) : @"not_observed_without_owned_controller",
+    NSMutableDictionary *details=[@{@"local_controller_verified":@(owner.verified),@"local_controller_reason":@(owner.reason),
+        @"controllers_seen":@(owner.controllers),@"owned_controllers":@(owner.ownedControllers),
+        @"character_stage":owner.verified ? @(collisionStageName(observation.stage)) : @"not_observed_without_owned_controller",
         @"character_generations_valid":@(target.generationsValid),@"alive_readable":@(aliveReadable),
         @"character_alive":@(aliveReadable && !(dead&1)),@"movement_mode":@(observation.movementMode),
         @"speed_eligible":@(wanted)} mutableCopy];
@@ -171,12 +171,12 @@ static void perform(uint64_t revision) {
     if(valid && memory.get(target.movement+0x420,field) && std::isfinite(field))details[@"crouching_speed_field"]=@(field);
     contextDiagnostics=details;
     if(!wanted) {
-        if(local.verified) {
+        if(owner.verified) {
             restoringFields=true;auto a=walkLease.restore(fieldAccess),b=crouchLease.restore(fieldAccess);
             cleanupOutcome=[NSString stringWithFormat:@"speed %s / %s",resultName(a),resultName(b)];
         } else cleanupOutcome=@"deferred_until_local_identity_returns";
         if(!speedRequested.load())lastOutcome=@"speed_disabled";
-        else if(!local.verified)lastOutcome=[@"waiting_local_player: " stringByAppendingString:@(local.reason)];
+        else if(!owner.verified)lastOutcome=[@"waiting_local_player: " stringByAppendingString:@(owner.reason)];
         else if(!valid)lastOutcome=[NSString stringWithFormat:@"character_not_ready: %s; generations=%d; alive=%d",collisionStageName(observation.stage),target.generationsValid,aliveReadable && !(dead&1)];
         else lastOutcome=[NSString stringWithFormat:@"movement_mode_%u_or_request_changed",unsigned(observation.movementMode)];
     } else {
@@ -192,20 +192,20 @@ static void perform(uint64_t revision) {
         if(failed(a) || failed(b)) {lastFailure=[@"speed: " stringByAppendingString:lastOutcome];lastFailureTime=NSDate.date.timeIntervalSince1970;speedRequested.store(false);restoringFields=true;walkLease.restore(fieldAccess);crouchLease.restore(fieldAccess);record(@"speed_failure");}
     }
     fanpro::Identity vehicleRoot;CollisionContext carrier;
-    bool flightWanted=flightRequested.load() && revision==requestRevision.load() && local.verified;
-    bool carrierReady=ownedCharacter(local,carrier);
+    bool flightWanted=flightRequested.load() && revision==requestRevision.load() && owner.verified;
+    bool carrierReady=ownedCharacter(owner,carrier);
     details[@"flight_carrier_ready"]=@(carrierReady);
     if(flightWanted && carrierReady && currentVehicle(carrier,vehicleRoot)) {
         if(!flightLease.active())record(@"flight_first_call_begin");
         auto result=flightLease.apply(physics,vehicleRoot,flightDirection.load());flightOutcome=@(resultName(result));
         if(failed(result)){lastFailure=[@"flight: " stringByAppendingString:flightOutcome];lastFailureTime=NSDate.date.timeIntervalSince1970;flightRequested.store(false);flightLease.restore(physics);record(@"flight_failure");}
     } else {
-        if(local.verified) {
+        if(owner.verified) {
             if(flightLease.active())record(@"flight_restore_begin");
             auto result=flightLease.restore(physics);cleanupOutcome=[cleanupOutcome stringByAppendingFormat:@"; flight %s",resultName(result)];
         }
         if(!flightRequested.load())flightOutcome=@"flight_disabled";
-        else if(!local.verified)flightOutcome=[@"waiting_local_player: " stringByAppendingString:@(local.reason)];
+        else if(!owner.verified)flightOutcome=[@"waiting_local_player: " stringByAppendingString:@(owner.reason)];
         else if(!carrierReady)flightOutcome=@"waiting_owned_alive_character";
         else if(revision!=requestRevision.load())flightOutcome=@"request_changed";
         else flightOutcome=@"waiting_ridden_vehicle";
