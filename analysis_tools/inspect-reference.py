@@ -505,7 +505,47 @@ def main(*, exact_names=EXACT_NAMES, focus_entries=FOCUS_ENTRIES,
                 'string':cstring(pointer) if pointer is not None and not in_code(pointer) else None,
                 'wide_string':wide_string(pointer) if pointer is not None and not in_code(pointer) else None})
         windows.append({'rva':hex(at),'bytes':size,'kind':'bounded_metadata_words','words':words})
+    # Trace selected reflected properties through their pointer tables to parent metadata.
+    def property_info(va):
+        pointer=rebases.get(va)
+        name=cstring(pointer) if pointer is not None else None
+        if name is None or not re.fullmatch(r'[A-Za-z0-9_]{1,128}',name):return None
+        try:dim,offset=struct.unpack('<II',read(va+32,8))
+        except ValueError:return None
+        if dim<1 or dim>128 or offset>0x20000:return None
+        return {'name':name,'descriptor_rva':rva(va),'offset':hex(offset),'array_dim':dim}
+    parent_properties=[]
+    for item in references:
+        if item['name'] not in ('WeaponName','WeaponData','WeaponType','VehicleType','VehicleData','ItemName','DisplayName'):continue
+        descriptor=base+int(item['reference_rva'],16)
+        for slot,target in rebases.items():
+            if target!=descriptor:continue
+            first=slot
+            for _ in range(256):
+                prior=rebases.get(first-8)
+                if prior is None or property_info(prior) is None:break
+                first-=8
+            props=[]
+            for n in range(256):
+                entry=rebases.get(first+n*8)
+                info=property_info(entry) if entry is not None else None
+                if info is None:break
+                props.append(info)
+            parents=[]
+            for where,value in rebases.items():
+                if value!=first:continue
+                words=[]
+                for delta in range(-64,104,8):
+                    try:raw=struct.unpack('<Q',read(where+delta,8))[0]
+                    except ValueError:continue
+                    ptr=rebases.get(where+delta)
+                    words.append({'relative':delta,'raw':hex(raw),'rva':rva(ptr) if ptr is not None else None,
+                        'string':cstring(ptr) if ptr is not None and not in_code(ptr) else None,
+                        'code':ptr is not None and in_code(ptr)})
+                parents.append({'reference_rva':rva(where),'words':words})
+            parent_properties.append({'selected_name':item['name'],'descriptor_rva':rva(descriptor),'array_rva':rva(first),'properties':props,'parent_references':parents})
     report = {
+        'property_parent_tables':parent_properties,
         'input_sha256': digest, 'pointer_formats': sorted(formats), 'rebase_count': len(rebases),
         'function_start_count': len(starts), 'names': {k: [rva(a) for a in sorted(v)] for k, v in string_addresses.items()},
         'metadata_references': references, 'adjacent_code_pointer_candidates': pairs,

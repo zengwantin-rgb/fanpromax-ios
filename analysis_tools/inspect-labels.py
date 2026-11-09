@@ -11,9 +11,11 @@ names=('XtrmWeapon','XtrmWeapon_Gun','XtrmWeaponProcessor','EquippedWeapons','Cu
  'VehicleType','GetVehicleType','VehicleID','VehicleId','VehicleData','GetVehicleData',
  'XtrmVehicle','XtrmWheeledVehicle','XtrmMotorbike','XtrmVehiclePawn',
  'Weapon_M416','Weap_M416','M416','M762','AKM','Dacia','ItemDisplayName')
-m.main(exact_names=names,focus_entries=(),dispatch_focus=(),output='out/labels',
+m.main(exact_names=names,focus_entries=(0x346be10,0x3392260,0x33cd164,0x35c653c),dispatch_focus=(),output='out/labels',
  discovery_pattern=r'(?:Weapon|Item|Vehicle).*(?:DisplayName|Name|ID|Id|Type)|(?:GetCurrentWeapon|GetEquippedWeapon)',
- priority_names=names,context_limit=150,context_extent=0x900,context_extents={})
+ priority_names=names,context_limit=190,context_extent=0x1000,context_extents={},
+ metadata_focus_rvas=(0x7511e68,0x7509550,0x749c938,0x74b8e28),
+ metadata_windows=((0x7511d00,0x500),(0x7509400,0x300),(0x749c800,0x300),(0x74b8d00,0x300)))
 report=json.loads(Path('out/labels/report.json').read_text());report['purpose']='Read-only iOS label discovery; no aiming, recoil, writes or input execution'
 Path('out/labels/report.json').write_text(json.dumps(report,indent=2)+'\n')
 combined=[]
