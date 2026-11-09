@@ -1,5 +1,6 @@
 #include "CollisionProbe.hpp"
 #include "LocalController.hpp"
+#include "VehicleTarget.hpp"
 #include <cassert>
 #include <cmath>
 #include <cstring>
@@ -113,9 +114,33 @@ void localOwnership() {
     result=local::readLocalController(m);assert(result.verified); // Current world context can be non-first.
     f.set(otherContext+0x250,world);assert(!local::readLocalController(m).verified); // Two matching contexts remain ambiguous.
 }
+void vehicleOwnership() {
+    Fixture f;Memory m{&f,Fixture::read,base};
+    constexpr uint64_t car=0x300200000,body=0x300210000,level=0x300220000,carClass=0x400200000,bodyClass=0x400210000,levelClass=0x400220000;
+    for(auto object:{car,body,level})f.allocate(object,0x1000);
+    for(auto klass:{carClass,bodyClass,levelClass})f.allocate(klass,0x100);
+    for(auto slot:{0x7f8b4a0ULL,0x80ae820ULL,0x80a1620ULL})f.allocate(base+slot,8);
+    f.set(base+0x7f8b4a0,carClass);f.set(base+0x80ae820,bodyClass);f.set(base+0x80a1620,levelClass);
+    f.set(car+0x30,encoded(carClass));f.set(body+0x30,encoded(bodyClass));f.set(level+0x30,encoded(levelClass));
+    f.set(car+8,encoded(level));f.set(level+0x178,world);f.set(car+0x278,body);f.set(body+0xa0,car);f.set(body+0x84,uint8_t(1));
+    f.set(controller+0x370,encoded(0));f.set(controller+0x2e0,encoded(car));
+    f.set(base+0x8174538,int32_t(3));
+    f.set(body+0x20,std::array<uint32_t,3>{0,0,0xb5c76d21U^(1U<<7)});f.set(chunk+24+8,body);f.set(chunk+24+20,int32_t(11));
+    f.set(car+0x20,std::array<uint32_t,3>{0,0,0xb5c76d21U^(2U<<7)});f.set(chunk+48+8,car);f.set(chunk+48+20,int32_t(12));
+    local::LocalController owner;owner.verified=true;owner.controller=controller;owner.world=world;
+    const auto before=f.regions;auto result=fanpro::readVehicleTarget(m,owner);
+    assert(result.ready && result.body.object==body && !std::strcmp(result.route,"possessed_vehicle") && f.regions==before);
+    owner.verified=false;assert(!fanpro::readVehicleTarget(m,owner).ready);owner.verified=true;
+    f.set(level+0x178,world+8);assert(!fanpro::readVehicleTarget(m,owner).ready);f.set(level+0x178,world);
+    f.set(body+0xa0,pawn);assert(!fanpro::readVehicleTarget(m,owner).ready);f.set(body+0xa0,car);
+    f.set(chunk+24+20,int32_t(0));assert(!fanpro::readVehicleTarget(m,owner).ready);f.set(chunk+24+20,int32_t(11));
+    f.beforeRead=[&](uint64_t at){if(at==body+0x84)f.set(controller+0x2e0,encoded(0));};
+    assert(!fanpro::readVehicleTarget(m,owner).ready);f.beforeRead={};
+}
+
 }
 int main() {
-    localOwnership();
+    localOwnership();vehicleOwnership();
     Fixture f;
     const auto before=f.regions;
     auto observation=f.observe();
