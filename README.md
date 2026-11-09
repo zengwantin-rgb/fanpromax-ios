@@ -1,5 +1,9 @@
 # FanProMAX iOS
 
+当前交付：[下载 0.2.0 IPA](https://github.com/zengwantin-rgb/fanpromax-ios/releases/tag/ios-13fb52fc28d6)。源码 `13fb52fc28d6526cc5cc8492db5737889ec68274`；[GitHub 托管 macOS 构建、界面与发布检查](https://github.com/zengwantin-rgb/fanpromax-ios/actions/runs/42685218087)均成功。设备包185个签名页及CRC通过，显示策略模型与常规/大字号UIKit检查通过；发布任务在云端核对原构建、UI及附件摘要后发布。服务器没有运行本轮编译、测试或交付验证脚本。
+
+升级前先停止旧版悬浮层，再通过TrollStore覆盖安装，并重新启动悬浮层和游戏读取。「显示」可开启忽略人机、调节标记距离及人数；「工具」可导出/导入显示配置。真机显示与权限仍需设备确认。
+
 面向 **iPhone 15 Pro Max / iOS 17.0 / TrollStore** 的独立原生 iOS 移植工程，仓库所有者为 `zengwantin-rgb`。本项目按用户提供的 FanProMAX Android APK 做功能核对；APK 的 DEX、ELF 和 Android 驱动不能直接编译或改后缀得到 iOS 程序。
 
 当前 0.2.0 为外置显示与配置迁移版，复用本用户既有 iOS 工程的采样、悬浮显示及权限诊断代码，重新设置独立的应用身份和存储目录。它不是完整的 Android 功能移植，也未打通游戏控制权限。
