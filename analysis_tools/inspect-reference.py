@@ -516,7 +516,7 @@ def main(*, exact_names=EXACT_NAMES, focus_entries=FOCUS_ENTRIES,
         return {'name':name,'descriptor_rva':rva(va),'offset':hex(offset),'array_dim':dim}
     parent_properties=[]
     for item in references:
-        if item['name'] not in ('WeaponName','WeaponData','WeaponType','VehicleType','VehicleData','ItemName','DisplayName'):continue
+        if item['name'] not in ('MaxWalkSpeed','MaxWalkSpeedCrouched','MaxFlySpeed','CustomTimeDilation','VehicleRiderComponent','VehicleMovementRef','bCanBeDamaged','DamageReduction','DamageMultiplier','Invincible','CharacterInvincibleDuration','Role','RemoteRole'):continue
         descriptor=base+int(item['reference_rva'],16)
         for slot,target in rebases.items():
             if target!=descriptor:continue

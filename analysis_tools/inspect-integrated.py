@@ -17,10 +17,12 @@ names=('CharacterMovement','MaxWalkSpeed','MaxWalkSpeedCrouched','MaxAcceleratio
  'DamageReduction','DamageMultiplier','DamageScale','DamageRate','Invincible','Invincibility','GodMode',
  'bInvulnerable','bInvincible','DamageComponent','HealthComponent','bIsInvincible','IsInvincible',
  'Armor','ArmorDamageReduction','ServerApplyDamage','ApplyDamage','Role','LocalRole','RemoteRole','HasAuthority')
-m.main(exact_names=names,focus_entries=(0x1c6cc90,0x504f328,0x359be28,0x35a9ab0,0x3a0c86c),
+m.main(exact_names=names,focus_entries=(0x1c6cc90,0x504f328,0x359be28,0x35a9ab0,0x3a0c86c,0x22d23e4,0x505566c,0x57a8194,0x3a0de18),
  dispatch_focus=(),output='out/integrated-survey',
  discovery_pattern=r'(?:Invinc|Invulner|GodMode|DamageReduction|DamageMultiplier|DamageScale|DamageRate|MaxFlySpeed|Vehicle.*(?:Gravity|Velocity|Movement|Driver)|CanBeDamaged)',
- priority_names=names,context_limit=240,context_extent=0x900,context_extents={})
+ priority_names=names,context_limit=260,context_extent=0x900,context_extents={},
+ metadata_focus_rvas=(0x75fcc68,0x7803738,0x7ad19d0,0x7b21568),
+ metadata_windows=((0x75fcc20,0x150),(0x7803700,0x150),(0x7ad1980,0x180),(0x7b21400,0x300)))
 report_path=Path('out/integrated-survey/report.json')
 report=json.loads(report_path.read_text())
 report['purpose']='Static feasibility evidence for in-game movement/vehicle/damage controls; no aiming or recoil; no runtime effect claim'
