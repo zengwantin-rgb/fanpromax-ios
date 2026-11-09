@@ -1,0 +1,34 @@
+name: Inspect iOS read-only weapon and vehicle labels
+on:
+  push:
+    branches: [analysis/readonly-labels]
+    paths: [analysis_tools/**, .github/workflows/label-analysis.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: macos-15-intel
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Inspect pinned input on hosted macOS only
+        env:
+          GH_TOKEN: ${{ secrets.SOURCE_ANALYSIS_TOKEN }}
+        run: |
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          mkdir -p input build
+          trap 'rm -rf input' EXIT
+          gh release download input-newstate-0.9.98-804 --repo zwthys-cyber/newstate-ios-port --pattern NEW_STATE_Decrypted.ipa --dir input
+          python3 -m venv build/label-venv
+          build/label-venv/bin/python -m pip install --only-binary=:all: capstone==5.0.6
+          build/label-venv/bin/python analysis_tools/inspect-labels.py input/NEW_STATE_Decrypted.ipa
+      - name: Deliver text evidence only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "labels-${GITHUB_SHA:0:12}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title '只读武器和载具标签分析' --notes '固定iOS输入的静态元数据/指令报告；没有运行游戏、调用游戏接口或修改内存。不包含原始IPA。' out/labels/report.json out/label-contexts.txt
