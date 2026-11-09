@@ -57,7 +57,7 @@ static bool identity(uint64_t object,uint64_t world,fanpro::Identity &out) {
 }
 static bool primitive(const fanpro::Identity &key) {
     uint8_t registered{};
-    return live(nullptr,key) && isA(memory,memory.encodedPointer(key.object+0x30),memory.pointer(memory.base+0x80b05a8)) &&
+    return live(nullptr,key) && isA(memory,memory.encodedPointer(key.object+0x30),memory.pointer(memory.base+0x80ae820)) &&
         memory.get(key.object+0x84,registered) && (registered&1);
 }
 static uint64_t method(const fanpro::Identity &key,uint64_t offset) {

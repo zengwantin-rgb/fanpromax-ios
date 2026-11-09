@@ -22,13 +22,14 @@ for rva,size,expected in ((0x59a1a3c,0x90,('ldr','x8, [x8, #0x818]')),
 assert ('bl',' #0x105517194'.strip()) in instructions(0x59a46f4,0x90)
 assert ('ldp','s0, s1, [sp, #0x14]') in instructions(0x59a4788,0x134)
 assert ('ldr','x2, [sp, #8]') in instructions(0x59a4788,0x134)
-entries=(0x505566c,0x5517194,0x59a1a3c,0x59a1a00,0x59a4788,0x3b7804c)
+assert instructions(0x59a0718,8)==[('adrp','x8, #0x1080ae000'),('ldr','x0, [x8, #0x820]')]
+entries=(0x59a0718,0x505566c,0x5517194,0x59a1a3c,0x59a1a00,0x59a4788,0x3b7804c)
 lines=['#pragma once','#include "PortCore.hpp"','#include <cstring>','namespace fanpro {','inline bool verifyProfile(const nsport::Memory &m) {','unsigned char actual[32];']
 for n,rva in enumerate(entries):
  raw=read(rva,32);lines.append('static const unsigned char expected%d[]={%s};'%(n,','.join(hex(v) for v in raw)))
  lines.append('if(!m.bytes(m.base+0x%x,actual,32) || std::memcmp(actual,expected%d,32))return false;'%(rva,n))
 lines+=['return true;','}','}'];Path('build/VerifiedProfile.hpp').write_text('\n'.join(lines)+'\n')
 Path('out/integrated/profile-report.json').write_text(json.dumps({'executable_sha256':hashlib.sha256(data).hexdigest(),
- 'walking_offset':'0x6dc','crouching_offset':'0x420','native_abi_callsite_checked':True,'native_fingerprints':[hex(v) for v in entries],
+ 'walking_offset':'0x6dc','crouching_offset':'0x420','native_abi_callsite_checked':True,'primitive_component_singleton':'0x80ae820','native_fingerprints':[hex(v) for v in entries],
  'runtime_effect_verified':False},indent=2)+'\n')
 print('PASS: pinned property descriptors, native virtual call slots, vector ABI call-site registers and generated runtime fingerprints')
