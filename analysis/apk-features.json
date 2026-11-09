@@ -1,0 +1,206 @@
+{
+  "input": {
+    "input_sha256": "02d6e9e30f0f25865552c75ae66e625c0466b017114ba9e5051edb60655024d9",
+    "input_bytes": 30836438
+  },
+  "application": {
+    "package": "com.fanpromax.launcher",
+    "version_name": "3.3.0",
+    "version_code": "30300",
+    "label": "FanProMAX",
+    "min_sdk": "30",
+    "target_sdk": "37",
+    "permissions": [
+      "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.REQUEST_INSTALL_PACKAGES",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.SYSTEM_ALERT_WINDOW",
+      "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
+      "com.fanpromax.launcher.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.INTERNET"
+    ],
+    "activities": [
+      "me.weishu.kernelsu.ui.MainActivity",
+      "me.weishu.kernelsu.ui.webui.WebUIActivity"
+    ],
+    "services": [
+      "me.weishu.kernelsu.ui.util.DownloadService",
+      "me.weishu.kernelsu.magica.MagicaService",
+      "me.weishu.kernelsu.ui.overlay.FanOverlayService"
+    ],
+    "receivers": [
+      "androidx.profileinstaller.ProfileInstallReceiver",
+      "me.weishu.kernelsu.magica.BootCompletedReceiver"
+    ],
+    "providers": [
+      "androidx.startup.InitializationProvider",
+      "androidx.core.content.FileProvider"
+    ],
+    "main_activity": "me.weishu.kernelsu.ui.MainActivity"
+  },
+  "architecture": "Android独立Root启动器，Java界面/服务调用内置原生libfanpro模块，经驱动或系统调用访问游戏进程；不是游戏安装包本体，也不是iOS模块。",
+  "features": [
+    {
+      "category": "人物显示",
+      "items": [
+        "方框",
+        "骨骼",
+        "射线",
+        "名字与距离",
+        "数字血量/血条",
+        "队友/人机筛选",
+        "手持武器文字/图片",
+        "头盔护甲背包信息"
+      ],
+      "evidence": "原生菜单文字与独立绘制函数",
+      "runtime_verified": false
+    },
+    {
+      "category": "地图与预警",
+      "items": [
+        "雷达及位置调整",
+        "屏幕外背敌箭头",
+        "被瞄预警",
+        "观战提醒",
+        "整局玩家名单"
+      ],
+      "evidence": "原生菜单、绘制/名单扫描函数",
+      "runtime_verified": false
+    },
+    {
+      "category": "物资与载具显示",
+      "items": [
+        "载具及距离",
+        "空投/超级空投",
+        "骨灰盒及盒子物资",
+        "物资筛选",
+        "手雷/爆炸范围显示",
+        "物品ID抓取与命名"
+      ],
+      "evidence": "菜单、名称表、抓取与绘制函数；物品名称表不代表对应物品实际存在于当前游戏",
+      "runtime_verified": false
+    },
+    {
+      "category": "瞄准",
+      "items": [
+        "内存自瞄",
+        "触摸自瞄",
+        "陀螺仪相关注入路径",
+        "自瞄部位/范围/速度/优先级",
+        "开火/开镜触发与延迟",
+        "自动开火",
+        "子弹追踪/喷子追踪",
+        "掩体漏打"
+      ],
+      "evidence": "菜单、自瞄线程与函数、触摸及FGyro函数；具体追踪机制仍需调用路径核对",
+      "post_launch_projectile_homing_verified": false,
+      "runtime_verified": false
+    },
+    {
+      "category": "枪械修改",
+      "items": [
+        "无后坐力",
+        "腰射防抖/子弹防抖",
+        "秒开倍镜"
+      ],
+      "evidence": "原生菜单与配置文字；实战参数效果未验证",
+      "runtime_verified": false
+    },
+    {
+      "category": "人物移动及特殊修改",
+      "items": [
+        "持枪加速",
+        "蛇皮加速",
+        "挥拳加速",
+        "飞天及高度",
+        "自转",
+        "无敌金身",
+        "伤害减少"
+      ],
+      "evidence": "原生菜单和配置标签；不证明服务器认可无敌、减伤或持续净加速",
+      "runtime_verified": false
+    },
+    {
+      "category": "载具修改",
+      "items": [
+        "飞车/飞天",
+        "飞车加速",
+        "漂移",
+        "防翻",
+        "零秒刹车"
+      ],
+      "evidence": "原生菜单与配置文字",
+      "runtime_verified": false
+    },
+    {
+      "category": "画面",
+      "items": [
+        "全图除草",
+        "人物广角",
+        "爆改帧率",
+        "分辨率模式和自定义宽高",
+        "独立悬浮层帧率"
+      ],
+      "evidence": "原生菜单；悬浮层FPS与游戏FPS必须区分",
+      "runtime_verified": false
+    },
+    {
+      "category": "账号与配置",
+      "items": [
+        "游客账号保存槽位/切换",
+        "游客相关清理",
+        "游戏登录账号重选",
+        "配置保存/导入/导出",
+        "日志导出",
+        "卡密验证与更新"
+      ],
+      "evidence": "DEX调用与资源文字；不能解除服务器封禁，也不能据文件名确认授权已破解",
+      "runtime_verified": false
+    },
+    {
+      "category": "悬浮层与工具",
+      "items": [
+        "Root渲染服务",
+        "可录屏/防录屏切换",
+        "屏幕录制",
+        "自定义背景/透明度/多语言",
+        "独立功能按钮",
+        "驱动连接选择",
+        "本机MCP/内存调试服务",
+        "云端初始化参数/特征码核对"
+      ],
+      "evidence": "DEX、JNI及原生函数/配置/诊断文字",
+      "runtime_verified": false
+    }
+  ],
+  "boundaries": [
+    "未安装、执行、登录、联网调用输入程序或连接游戏进程。",
+    "只解码内置资源用于静态读取，没有修改或绕过授权检查。",
+    "菜单、代码存在与实机功能有效分开判断；没有命中率、伤害、无敌、反检测或兼容性验收。",
+    "没有接入或改动现有r13运行时。"
+  ],
+  "native_evidence": {
+    "drawing_functions": [
+      "绘制方框",
+      "绘制骨骼",
+      "绘制射线",
+      "绘制血量",
+      "绘制距离",
+      "绘制手持"
+    ],
+    "aim_functions": [
+      "绘制::Fan式自瞄 @0xa2bc20 size4448",
+      "绘制::Fan自瞄线程 @0xa2d440 size268",
+      "FGyro::Init @0xa06454 size528",
+      "FGyro::write_and_inject @0xa19924 size160"
+    ],
+    "payload_bytes": 16986360,
+    "payload_sha256": "5f4ba230657469e44105de501afb5cd98da7e5b71cdfa6bfeca481180b1bd8b6",
+    "verified_direct_calls": [
+      "Fan式自瞄调用玩家地址快照、云链读取、骨骼变换和触摸状态检查；自瞄线程调用pthread_create。"
+    ]
+  }
+}

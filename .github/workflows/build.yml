@@ -1,0 +1,59 @@
+name: Build FanProMAX iOS 17 TrollStore
+on:
+  push:
+    branches: [main]
+    paths: [apps/**, src/**, tests/**, scripts/**, .github/workflows/build.yml, README.md]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15-intel
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Build, test and verify the device package
+        run: bash scripts/build-on-github.sh
+      - name: Stage checked package as draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "ios-${GITHUB_SHA:0:12}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title 'FanProMAX iOS 0.1.0 · 巨魔外置显示基础版' --notes '目标：iPhone 15 Pro Max / iOS 17.0 / TrollStore。提供独立显示、雷达与诊断；不是APK全功能转换，自瞄/追踪/写入等尚未移植。新应用身份下的实际读取与跨应用悬浮须设备验证。' out/FanProMAX-iOS.ipa out/package-report.json out/SHA256SUMS out/FanProMAX-README.zh-CN.md out/FanProMAX-ThirdPartyNotices.txt out/apk-features.json
+  ui:
+    runs-on: macos-15-intel
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Check real UIKit controls and layout
+        run: |
+          if test -d /Applications/Xcode_16.4.app/Contents/Developer; then
+            export DEVELOPER_DIR=/Applications/Xcode_16.4.app/Contents/Developer
+          fi
+          bash scripts/preview-external-ui.sh
+      - name: Upload bounded UI reports
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: fanpromax-ui-${{ github.sha }}
+          path: out/FanProMAX-UI-preview.zip
+          if-no-files-found: error
+  publish:
+    needs: [build, ui]
+    runs-on: macos-15-intel
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Attach UIKit report and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p reports
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "fanpromax-ui-$GITHUB_SHA" --dir reports
+          gh release upload "ios-${GITHUB_SHA:0:12}" --repo "$GITHUB_REPOSITORY" reports/FanProMAX-UI-preview.zip
+          gh release edit "ios-${GITHUB_SHA:0:12}" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease
