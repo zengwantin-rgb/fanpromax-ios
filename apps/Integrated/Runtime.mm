@@ -28,6 +28,7 @@ fanpro::FieldLease walkLease,crouchLease;
 uint64_t currentWorld{};
 NSString *lastOutcome=@"尚未修改";
 NSString *profileError;
+NSString *lastFailure;NSTimeInterval lastFailureTime{};
 uint64_t taskCount{},speedWrites{};
 NSTimeInterval lastLog{};
 NSString *folder;
@@ -107,7 +108,7 @@ static bool failed(fanpro::FieldResult result){return result!=fanpro::FieldResul
 static void record(NSString *phase) {
     if(!folder)return;
     NSDictionary *value=@{@"version":@"integrated-i1",@"phase":phase,@"time":@(NSDate.date.timeIntervalSince1970),
-        @"profile_ready":@(ready),@"profile_error":profileError?:@"",@"speed_requested":@(speedRequested.load()),
+        @"profile_ready":@(ready),@"last_failure":lastFailure?:@"",@"last_failure_time":@(lastFailureTime),@"profile_error":profileError?:@"",@"speed_requested":@(speedRequested.load()),
         @"selected_multiplier":@(speedTenths.load()/10.0),@"speed_field_outcome":lastOutcome?:@"",
         @"flight_requested":@(flightRequested.load()),@"flight_outcome":flightOutcome?:@"",
         @"flight_calls":@(flightCalls),@"flight_lease_active":@(flightLease.active()),
@@ -148,14 +149,16 @@ static void perform(uint64_t revision) {
         if(a==fanpro::FieldResult::applied)++speedWrites;
         if(b==fanpro::FieldResult::applied)++speedWrites;
         lastOutcome=[NSString stringWithFormat:@"%s / %s",resultName(a),resultName(b)];
-        if(failed(a) || failed(b)) {speedRequested.store(false);restoringFields=true;walkLease.restore(fieldAccess);crouchLease.restore(fieldAccess);}
+        if(failed(a) || failed(b)) {lastFailure=[@"speed: " stringByAppendingString:lastOutcome];lastFailureTime=NSDate.date.timeIntervalSince1970;speedRequested.store(false);restoringFields=true;walkLease.restore(fieldAccess);crouchLease.restore(fieldAccess);record(@"speed_failure");}
     }
     fanpro::Identity vehicleRoot;
     bool flightWanted=flightRequested.load() && revision==requestRevision.load() && valid;
     if(flightWanted && currentVehicle(target,vehicleRoot)) {
+        if(!flightLease.active())record(@"flight_first_call_begin");
         auto result=flightLease.apply(physics,vehicleRoot,flightDirection.load());flightOutcome=@(resultName(result));
-        if(failed(result)){flightRequested.store(false);flightLease.restore(physics);}
+        if(failed(result)){lastFailure=[@"flight: " stringByAppendingString:flightOutcome];lastFailureTime=NSDate.date.timeIntervalSince1970;flightRequested.store(false);flightLease.restore(physics);record(@"flight_failure");}
     } else {
+        if(flightLease.active())record(@"flight_restore_begin");
         auto result=flightLease.restore(physics);
         flightOutcome=flightWanted ? @"等待当前乘坐载具" : @(resultName(result));
     }
