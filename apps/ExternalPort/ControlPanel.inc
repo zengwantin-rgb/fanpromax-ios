@@ -591,7 +591,17 @@ static UIColor *NSPCardColor(void) {return [UIColor colorWithRed:0.075 green:0.1
     check(!self.startingHUD && [NSPReadJSON(@"launch.json")[@"phase"] isEqualToString:@"stop_requested"],@"stop cancels a pending start before any helper spawn");
     [NSFileManager.defaultManager removeItemAtPath:NSPPath(@"launch.json") error:nil];[self refresh];
     [NSFileManager.defaultManager removeItemAtPath:NSPPath(@"status.json") error:nil];[self refresh];
+    // Inspect metadata only: do not create or reconfigure the simulator's system fetcher.
+    Class systemFetcher=NSClassFromString(@"UIEventFetcher");
+    Method systemSetter=systemFetcher ? class_getInstanceMethod(systemFetcher,NSSelectorFromString(@"setEventFetcherSink:")) : nullptr;
+    const char *systemEncoding=systemSetter ? method_getTypeEncoding(systemSetter) : nullptr;
+    NSMethodSignature *systemSignature=systemEncoding ? [NSMethodSignature signatureWithObjCTypes:systemEncoding] : nil;
+    NSDictionary *systemInterface=@{@"os":NSProcessInfo.processInfo.operatingSystemVersionString,
+        @"setter_present":@(systemSetter!=nullptr),@"setter_encoding":NSPTypeLabel(systemEncoding),
+        @"object_abi_compatible":@(NSPSinkSignature(systemSignature)),@"device_equivalence_assumed":@NO};
+    NSLog(@"Receiver metadata (simulator only): %@",systemInterface);
     NSPWriteJSON(@"ui-smoke.json",@{@"passed":@(failures.count==0),@"checks":checks,@"failures":failures,
+        @"simulator_receiver_metadata":systemInterface,
         @"scope":@"Simulator UI, overlay geometry and control routing only; no game, system touch bridge or device permissions tested"});
 }
 #endif
