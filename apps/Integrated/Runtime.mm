@@ -31,7 +31,7 @@ fanpro::FieldLease walkLease,crouchLease;
 uint64_t currentWorld{};
 NSString *lastOutcome=@"尚未修改";
 NSString *profileError;
-fanpro::MotionWindow motionWindow;NSDictionary *lastMotionWindow;
+fanpro::MotionWindow motionWindow;NSDictionary *lastMotionWindow;NSMutableArray *motionWindows;
 NSDictionary *contextDiagnostics;NSString *cleanupOutcome=@"none";
 NSTimeInterval lastSpeedWriteTime{};
 uint64_t localVerifiedFrames{},characterReadyFrames{},eligibleSpeedFrames{};
@@ -100,8 +100,8 @@ static const char *resultName(fanpro::FieldResult result) {
 static bool failed(fanpro::FieldResult result){return result!=fanpro::FieldResult::off && result!=fanpro::FieldResult::applied && result!=fanpro::FieldResult::unchanged;}
 static void record(NSString *phase) {
     if(!folder)return;
-    NSDictionary *value=@{@"version":@"integrated-i3",@"phase":phase,@"time":@(NSDate.date.timeIntervalSince1970),
-        @"context":contextDiagnostics?:@{},@"last_motion_window":lastMotionWindow?:@{},@"cleanup_outcome":cleanupOutcome,
+    NSDictionary *value=@{@"version":@"integrated-i3.1",@"phase":phase,@"time":@(NSDate.date.timeIntervalSince1970),
+        @"context":contextDiagnostics?:@{},@"last_motion_window":lastMotionWindow?:@{},@"motion_windows":motionWindows?:@[],@"cleanup_outcome":cleanupOutcome,
         @"last_speed_write_time":@(lastSpeedWriteTime),@"local_verified_frames":@(localVerifiedFrames),
         @"character_ready_frames":@(characterReadyFrames),@"eligible_speed_frames":@(eligibleSpeedFrames),
         @"profile_ready":@(ready),@"last_failure":lastFailure?:@"",@"last_failure_time":@(lastFailureTime),@"profile_error":profileError?:@"",@"speed_requested":@(speedRequested.load()),
@@ -190,10 +190,13 @@ static void perform(uint64_t revision) {
             fanpro::Identity actor{target.pawn,target.items[0],target.world,target.serials[0]};
             auto measured=motionWindow.add(actor,speedRequested.load() ? speedTenths.load() : 10,
                 NSProcessInfo.processInfo.systemUptime,position.x,position.y);
-            if(measured.valid)lastMotionWindow=@{@"time":@(NSDate.date.timeIntervalSince1970),@"seconds":@(measured.seconds),
+            if(measured.valid) {lastMotionWindow=@{@"time":@(NSDate.date.timeIntervalSince1970),@"seconds":@(measured.seconds),
                 @"net_meters":@(measured.netMeters),@"path_meters":@(measured.pathMeters),@"net_mps":@(measured.netMPS),
                 @"path_mps":@(measured.pathMPS),@"samples":@(measured.samples),@"selected_multiplier":@(measured.tenths/10.0),
                 @"scope":@"local root displacement; straight-line comparison required; no server acceptance inferred"};
+                if(!motionWindows)motionWindows=[NSMutableArray array];
+                [motionWindows addObject:lastMotionWindow];if(motionWindows.count>90)[motionWindows removeObjectAtIndex:0];
+            }
         } else motionWindow.reset();
         uint64_t table=memory.pointer(target.movement),getter=table ? memory.pointer(table+0x480) : 0;
         details[@"native_speed_getter_available"]=@(table==memory.base+0x7127e10 && getter==memory.base+0x1c6cc90);
@@ -252,7 +255,7 @@ static void perform(uint64_t revision) {
         self.card=[UIScrollView new];self.card.backgroundColor=[UIColor colorWithWhite:0.06 alpha:0.95];self.card.layer.cornerRadius=16;self.card.hidden=YES;
         [self.card addSubview:self.content];[self addSubview:self.card];[self bringSubviewToFront:self.launcher];
         UILabel *(^label)(NSString *)=^UILabel *(NSString *text){UILabel *l=[UILabel new];l.text=text;l.textColor=UIColor.whiteColor;l.numberOfLines=0;l.font=[UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];l.adjustsFontForContentSizeCategory=YES;return l;};
-        [self.content addArrangedSubview:label(@"FanProMAX · 内置试验 i3")];
+        [self.content addArrangedSubview:label(@"FanProMAX · 内置试验 i3.1")];
         UIStackView *row=[UIStackView new];row.axis=UILayoutConstraintAxisHorizontal;row.distribution=UIStackViewDistributionEqualSpacing;
         [row addArrangedSubview:label(@"人物加速（待实测）")];self.speed=[UISwitch new];self.speed.enabled=ready;
         [self.speed addTarget:self action:@selector(speedChanged:) forControlEvents:UIControlEventValueChanged];[row addArrangedSubview:self.speed];

@@ -50,7 +50,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "integrated-${GITHUB_SHA:0:12}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title 'FanProMAX 内置 i3 · 人物加速与飞车试验' --notes '15PM / iOS17.0 / TrollStore；原游戏0.9.98(804)。补直接控制载具的驾驶位识别，验证本地归属、世界、车辆及物理组件代数和所有者；新增最终速度上限、本地速度及位移窗口。加速无体感变化仍在排查，不将字段倍数当作实际倍速。人物速度字段1–3倍、载具重力/垂直速度控制，默认关闭。真实净速度、网络回拉、飞车效果及游戏启动待手机确认。无敌与减伤尚未实现；不含自瞄与压枪。外置显示App仍单独保留。本包没有移入旧自瞄、压枪或警告补丁。' out/integrated/*
+          gh release create "integrated-${GITHUB_SHA:0:12}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title 'FanProMAX 内置 i3.1 · 人物加速与飞车试验' --notes '15PM / iOS17.0 / TrollStore；原游戏0.9.98(804)。补直接控制载具的驾驶位识别，验证本地归属、世界、车辆及物理组件代数和所有者；新增最终速度上限、本地速度及最近90个完整位移窗口，避免导出前停步覆盖行走记录。加速无体感变化仍在排查，不将字段倍数当作实际倍速。人物速度字段1–3倍、载具重力/垂直速度控制，默认关闭。真实净速度、网络回拉、飞车效果及游戏启动待手机确认。无敌与减伤尚未实现；不含自瞄与压枪。外置显示App仍单独保留。本包没有移入旧自瞄、压枪或警告补丁。' out/integrated/*
   ui:
     runs-on: macos-15-intel
     timeout-minutes: 25
