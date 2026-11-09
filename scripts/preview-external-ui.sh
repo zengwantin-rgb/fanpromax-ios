@@ -5,6 +5,24 @@ if [[ "${GITHUB_ACTIONS:-}" != true || "${RUNNER_ENVIRONMENT:-}" != github-hoste
   exit 1
 fi
 task_preview_app="$PWD/build/ui-preview/FanProMAX.app"
+task_sim_id=""
+preview_failure_logs() {
+  task_failure_code=$?
+  if [[ "$task_failure_code" -ne 0 && -n "$task_sim_id" ]]; then
+    echo 'Cloud simulator diagnostics for this test app:'
+    xcrun simctl spawn "$task_sim_id" log show --last 5m --style compact --predicate 'process == "FanProMAX"' 2>&1 | tail -n 100 || true
+    python3 - <<'PYDIAG'
+from pathlib import Path
+paths=sorted((Path.home()/'Library/Logs/DiagnosticReports').glob('FanProMAX*'),key=lambda p:p.stat().st_mtime,reverse=True)
+for path in paths[:3]:
+    if path.is_file() and path.stat().st_size<3_000_000:
+        print('SIMULATOR APP REPORT',path.name)
+        print(path.read_text(errors='replace')[:26000])
+PYDIAG
+  fi
+  return "$task_failure_code"
+}
+trap preview_failure_logs EXIT
 mkdir -p "$task_preview_app" out/ui-preview
 swiftc scripts/check-ui-capture.swift -o build/check-ui-capture
 task_sim_sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
@@ -41,7 +59,7 @@ task_sim_data="$(xcrun simctl get_app_container "$task_sim_id" io.github.zengwan
 task_smoke_path="$task_sim_data/tmp/NSPPreview/ui-smoke.json"
 task_ui_ready="$task_sim_data/tmp/NSPPreview/ui-ready.json"
 wait_ui_ready() {
-  for task_poll in {1..30}; do
+  for task_poll in {1..60}; do
     if [[ -f "$task_ui_ready" ]]; then return 0; fi
     sleep 1
   done
@@ -57,7 +75,7 @@ capture_ui() {
   echo 'No rendered NSP UI screenshot after retries.' >&2
   return 1
 }
-for task_poll in {1..25}; do
+for task_poll in {1..90}; do
   if [[ -f "$task_smoke_path" ]]; then break; fi
   sleep 1
 done
@@ -81,7 +99,7 @@ xcrun simctl ui "$task_sim_id" content_size accessibility-extra-large
 rm -f "$task_smoke_path"
 rm -f "$task_ui_ready"
 xcrun simctl launch "$task_sim_id" io.github.zengwantin.fanpromax.preview --nsp-smoke
-for task_poll in {1..25}; do
+for task_poll in {1..90}; do
   if [[ -f "$task_smoke_path" ]]; then break; fi
   sleep 1
 done
