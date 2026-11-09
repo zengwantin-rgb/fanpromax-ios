@@ -4,11 +4,6 @@
 #import <objc/runtime.h>
 #include "RemoteReader.hpp"
 #include "DisplayPolicy.hpp"
-#include "EventLoopLookup.hpp"
-#include <mach/mach.h>
-#if defined(__arm64e__)
-#include <ptrauth.h>
-#endif
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <dlfcn.h>
@@ -25,7 +20,7 @@
 extern char **environ;
 static NSString *NSPFolder;
 static NSString *const NSPStop=@"io.github.zengwantin.fanpromax.stop";
-static NSString *const NSPVersion=@"0.2.1";
+static NSString *const NSPVersion=@"0.2.2";
 #ifdef NSP_UI_PREVIEW
 static NSString *const NSPStorage=@"";
 #else
@@ -78,6 +73,21 @@ static NSDictionary *NSPRuntimePermissions(void) {
     }
     if (task) CFRelease(task);
     return values;
+}
+// A separate bounded trace survives parent status updates and abrupt child exits.
+static NSMutableDictionary *NSPStartupReport;
+static void NSPStartup(NSString *stage) {
+    if(!NSPStartupReport) {
+        NSPStartupReport=[@{@"version":NSPVersion,@"helper_pid":@(getpid()),
+            @"uid":@(getuid()),@"euid":@(geteuid()),@"runtime_entitlements":NSPRuntimePermissions(),
+            @"system_code_scanning_enabled":@NO,@"custom_hud_application":@NO} mutableCopy];
+    }
+    NSMutableArray *history=[NSPStartupReport[@"history"] mutableCopy]?:[NSMutableArray array];
+    NSNumber *time=@(NSDate.date.timeIntervalSince1970);
+    [history addObject:@{@"stage":stage,@"time":time}];
+    if(history.count>24)[history removeObjectAtIndex:0];
+    NSPStartupReport[@"history"]=history;NSPStartupReport[@"stage"]=stage;NSPStartupReport[@"time"]=time;
+    NSPWriteJSON(@"startup.json",NSPStartupReport);
 }
 static void NSPReport(NSString *status,NSDictionary *extra) {
     NSMutableDictionary *report=[@{@"version":NSPVersion,@"helper_pid":@(getpid()),
@@ -328,11 +338,14 @@ static void NSPStopCallback(CFNotificationCenterRef center,void *observer,CFStri
 }
 @implementation NSPHUDDelegate
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)options {
-    (void)application;(void)options;
+    (void)options;
+    NSPStartup(@"delegate_entered");
     NSPReport(@"正在注册跨应用悬浮层",nil);
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(),(__bridge const void *)self,
         NSPStopCallback,(__bridge CFStringRef)NSPStop,NULL,CFNotificationSuspensionBehaviorDeliverImmediately);
+    NSPStartup(@"window_create_begin");
     self.window=[[NSPHUDWindow alloc] initWithFrame:NSPScreenBounds()];
+    NSPStartup(@"window_created");
     self.window.backgroundColor=UIColor.clearColor;self.window.windowLevel=10000010.0;
     UIViewController *controller=[UIViewController new];controller.view.backgroundColor=UIColor.clearColor;
     self.canvas=[[NSPCanvas alloc] initWithFrame:self.window.bounds];
@@ -340,17 +353,29 @@ static void NSPStopCallback(CFNotificationCenterRef center,void *observer,CFStri
     self.widgets=[[NSPWidgetLayer alloc] initWithFrame:self.window.bounds];self.widgets.canvas=self.canvas;
     [self.widgets insertSubview:self.canvas atIndex:0];[controller.view addSubview:self.widgets];
     ((NSPHUDWindow *)self.window).widgets=self.widgets;NSPActiveWidgets=self.widgets;self.window.rootViewController=controller;
+    NSPStartup(@"window_show_begin");
     [self.window makeKeyAndVisible];
+    NSPStartup(@"window_visible");
     Class cls=NSClassFromString(@"SBSAccessibilityWindowHostingController");
     SEL selector=NSSelectorFromString(@"registerWindowWithContextID:atLevel:");
+    NSPStartup(@"host_create_begin");
     self.host=cls ? [[cls alloc] init] : nil;
+    NSPStartup(@"host_created");
     if (!self.host || ![self.host respondsToSelector:selector] || ![self.window respondsToSelector:@selector(_contextId)]) {
         NSPReport(@"跨应用窗口接口不可用，悬浮层未注册",@{@"overlay_registered":@NO});self.window.hidden=YES;return YES;
     }
+    NSPStartup(@"context_query_begin");
     unsigned context=[self.window _contextId];double level=self.window.windowLevel;
     if (!context) {NSPReport(@"窗口上下文尚未建立，悬浮层未注册",@{@"overlay_registered":@NO});self.window.hidden=YES;return YES;}
     NSInvocation *call=[NSInvocation invocationWithMethodSignature:[NSMethodSignature signatureWithObjCTypes:"v@:Id"]];
-    call.target=self.host;call.selector=selector;[call setArgument:&context atIndex:2];[call setArgument:&level atIndex:3];[call invoke];
+    call.target=self.host;call.selector=selector;[call setArgument:&context atIndex:2];[call setArgument:&level atIndex:3];
+    NSPStartup(@"hosting_begin");[call invoke];NSPStartup(@"hosting_returned");
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.5*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
+        NSPStartup(@"receiver_setup_begin");
+        NSPPrepareHUDInput(application,NSClassFromString(@"UIEventFetcher"));
+        NSPStartupReport[@"receiver_setup"]=NSPEventBootstrapReport?:@{};
+        NSPStartup(@"receiver_setup_returned");
+    });
     _queue=dispatch_queue_create("io.github.zengwantin.fanpromax.read",DISPATCH_QUEUE_SERIAL);
     __weak NSPHUDDelegate *weak=self;
     self.timer=[NSTimer scheduledTimerWithTimeInterval:1.0/60.0 repeats:YES block:^(NSTimer *timer) {
@@ -469,7 +494,7 @@ static void NSPStopCallback(CFNotificationCenterRef center,void *observer,CFStri
         NSMutableDictionary *report=[extra mutableCopy]?:[NSMutableDictionary dictionary];
         report[@"overlay_hidden"]=@(self.widgets.collapsed);report[@"radar_editing"]=@(self.widgets.editing);
         report[@"overlay_interactions"]=@(self.widgets.interactions);report[@"touch_bridge_configured"]=@(NSPTouchBridgeConfigured);
-        report[@"touch_pipeline"]=@{@"setup_revision":@2,@"bootstrap":NSPEventBootstrapReport?:@{},@"event_loop_prepared":@(NSPEventLoopPrepared),@"hid_events":@(NSPHIDEvents.load()),
+        report[@"touch_pipeline"]=@{@"setup_revision":@3,@"bootstrap":NSPEventBootstrapReport?:@{},@"event_loop_prepared":@(NSPEventLoopPrepared),@"hid_events":@(NSPHIDEvents.load()),
             @"ax_decoded":@(NSPAXDecoded.load()),@"ax_failures":@(NSPAXFailures.load()),
             @"ax_delivered":@(self.widgets.axTouches),@"uikit_delivered":@(self.widgets.uiTouches),
             @"events_observed":@(NSPHIDEvents.load()>0 || self.widgets.uiTouches>0 || self.widgets.axTouches>0),
@@ -612,6 +637,13 @@ static void NSPStopCallback(CFNotificationCenterRef center,void *observer,CFStri
                     if (WIFSIGNALED(status)) {extra[@"exit_signal"]=@(WTERMSIG(status));message=[NSString stringWithFormat:@"辅助进程被信号 %d 终止",WTERMSIG(status)];}
                     else if (WIFEXITED(status)) {extra[@"exit_code"]=@(WEXITSTATUS(status));message=[NSString stringWithFormat:@"辅助进程已退出，退出码 %d",WEXITSTATUS(status)];}
                     else message=[NSString stringWithFormat:@"辅助进程状态：%d",status];
+                    NSMutableDictionary *startup=[NSPReadJSON(@"startup.json") mutableCopy];
+                    if([startup[@"helper_pid"] intValue]==child) {
+                        if(extra[@"exit_signal"])startup[@"exit_signal"]=extra[@"exit_signal"];
+                        if(extra[@"exit_code"])startup[@"exit_code"]=extra[@"exit_code"];
+                        extra[@"last_startup_stage"]=startup[@"stage"]?:@"unknown";
+                        NSPWriteJSON(@"startup.json",startup);
+                    }
                     NSPLaunchReport(@"child_exited",message,0,child,extra);
                 }
                 NSDictionary *old=NSPReadJSON(@"status.json");
@@ -627,7 +659,7 @@ static void NSPStopCallback(CFNotificationCenterRef center,void *observer,CFStri
 }
 - (void)shareStatus {
     NSMutableArray *files=[NSMutableArray array];
-    for (NSString *name in @[@"status.json",@"settings.json",@"launch.json",@"spawn-check-mobile.json",@"spawn-check-root.json",
+    for (NSString *name in @[@"status.json",@"settings.json",@"startup.json",@"launch.json",@"spawn-check-mobile.json",@"spawn-check-root.json",
         @"memory-check.json",@"memory-check-launch.json"]) {
         if ([NSFileManager.defaultManager fileExistsAtPath:NSPPath(name)]) [files addObject:[NSURL fileURLWithPath:NSPPath(name)]];
     }
@@ -661,6 +693,7 @@ static void NSPStopCallback(CFNotificationCenterRef center,void *observer,CFStri
 @end
 
 [[maybe_unused]] static int NSPHUDMain(void) {
+    NSPStartup(@"helper_entered");
     NSPReport(@"外置进程已进入，正在初始化窗口服务",@{@"runtime_entitlements":NSPRuntimePermissions()});
     if (geteuid()!=0) {NSPReport(@"辅助进程未以 root 身份启动，已停止初始化",nil);return 7;}
     // Same private HUD entry sequence used by TrollSpeed; no code injection.
@@ -674,18 +707,24 @@ static void NSPStopCallback(CFNotificationCenterRef center,void *observer,CFStri
     auto instantiate=reinterpret_cast<Instantiate>(dlsym(RTLD_DEFAULT,"UIApplicationInstantiateSingleton"));
     if (!sbs || !gsInit || !bksInit || !appInit || !instantiate) {NSPReport(@"外置窗口所需的系统接口缺失",nil);return 2;}
     @try {
-        (void)NSPScreenBounds();(void)CFRunLoopGetCurrent();gsInit();bksInit();appInit();instantiate(NSPHUDApplication.class);
+        NSPStartup(@"frameworks_ready");
+        (void)NSPScreenBounds();(void)CFRunLoopGetCurrent();gsInit();bksInit();appInit();
+        NSPStartup(@"application_create_begin");instantiate(UIApplication.class);NSPStartup(@"application_created");
         static NSPHUDDelegate *delegate;delegate=[NSPHUDDelegate new];
         UIApplication *application=UIApplication.sharedApplication;application.delegate=delegate;
 
+        NSPStartup(@"accessibility_begin");
         if ([application respondsToSelector:@selector(_accessibilityInit)]) [application _accessibilityInit];
+        NSPStartup(@"accessibility_returned");
         [[NSBundle bundleWithPath:@"/System/Library/PrivateFrameworks/AccessibilityUtilities.framework"] load];
         NSPAXClass=NSClassFromString(@"AXEventRepresentation");
         using TouchCallback=void (*)(void *,void *,void *,CFTypeRef);
         using RegisterTouch=void *(*)(TouchCallback);
         auto registerTouch=reinterpret_cast<RegisterTouch>(dlsym(bks,"BKSHIDEventRegisterEventCallback"));
         if (registerTouch && [NSPAXClass respondsToSelector:@selector(representationWithHIDEvent:hidStreamIdentifier:)]) {
+            NSPStartup(@"hid_registration_begin");
             registerTouch(NSPOverlayTouch);NSPTouchBridgeConfigured=YES;
+            NSPStartup(@"hid_registration_returned");
         }
         NSMutableDictionary *bootstrap=[NSPEventBootstrapReport mutableCopy]?:[NSMutableDictionary dictionary];
         bootstrap[@"hid_callback_api_found"]=@(registerTouch!=nullptr);
@@ -696,7 +735,7 @@ static void NSPStopCallback(CFNotificationCenterRef center,void *observer,CFStri
         auto mode=reinterpret_cast<Mode>(dlsym(gs,"GSEventPushRunLoopMode"));
         if (events) events(false);if (mode) mode(kCFRunLoopDefaultMode);
         if (![application respondsToSelector:@selector(__completeAndRunAsPlugin)]) {NSPReport(@"系统不支持独立 HUD 运行入口",nil);return 3;}
-        [application __completeAndRunAsPlugin];CFRunLoopRun();
+        NSPStartup(@"plugin_begin");[application __completeAndRunAsPlugin];NSPStartup(@"plugin_returned");CFRunLoopRun();
     } @catch (NSException *exception) {
         NSPReport([NSString stringWithFormat:@"外置窗口异常：%@：%@",exception.name,exception.reason],nil);return 4;
     }

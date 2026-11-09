@@ -251,7 +251,7 @@ static UIColor *NSPCardColor(void) {return [UIColor colorWithRed:0.075 green:0.1
 }
 - (void)featuresPage {
     [self.content addArrangedSubview:[self label:@"功能进度" size:27 weight:UIFontWeightBold color:UIColor.whiteColor]];
-    [self.content addArrangedSubview:[self label:@"iOS 0.2.1 提供外置显示、筛选和配置迁移。Android APK 的功能不会因安装 IPA 自动获得。" size:13 weight:UIFontWeightRegular color:UIColor.secondaryLabelColor]];
+    [self.content addArrangedSubview:[self label:@"iOS 0.2.2 提供外置显示、筛选和配置迁移。Android APK 的功能不会因安装 IPA 自动获得。" size:13 weight:UIFontWeightRegular color:UIColor.secondaryLabelColor]];
     NSData *data=[NSData dataWithContentsOfFile:[NSBundle.mainBundle pathForResource:@"Features" ofType:@"json"]];
     id entries=data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
     if (![entries isKindOfClass:NSArray.class]) {
@@ -355,6 +355,7 @@ static UIColor *NSPCardColor(void) {return [UIColor colorWithRed:0.075 green:0.1
     NSDictionary *memory=NSPReadJSON(@"memory-check.json"),*memoryLaunch=NSPReadJSON(@"memory-check-launch.json");
     NSDictionary *control=memory[@"game_control"];
     if (self.checkingMemory) self.memoryStatus.text=@"验证运行中…";
+    else if (memory && ![memory[@"version"] isEqual:NSPVersion]) self.memoryStatus.text=[NSString stringWithFormat:@"旧版本 %@ 的验证记录；请重新验证当前 %@。",memory[@"version"]?:@"未知",NSPVersion];
     else if (control && [control[@"port_acquired"] boolValue]) self.memoryStatus.text=@"已取得游戏控制端口；没有测试游戏写入。";
     else if (control[@"task_for_pid_return"]) self.memoryStatus.text=[NSString stringWithFormat:@"未取得游戏控制端口（返回 %@）；未尝试游戏写入。",control[@"task_for_pid_return"]];
     else if (memoryLaunch) self.memoryStatus.text=memoryLaunch[@"status"]?:@"暂无完整结果，请导出诊断。";
@@ -365,7 +366,7 @@ static UIColor *NSPCardColor(void) {return [UIColor colorWithRed:0.075 green:0.1
     text.editable=NO;text.alwaysBounceVertical=YES;text.backgroundColor=NSPBackground();text.textColor=UIColor.labelColor;
     text.font=[UIFont monospacedSystemFontOfSize:12 weight:UIFontWeightRegular];text.textContainerInset=UIEdgeInsetsMake(16,16,24,16);
     NSMutableString *summary=[NSMutableString stringWithFormat:@"FanProMAX %@\n%@\n\n",NSPVersion,NSProcessInfo.processInfo.operatingSystemVersionString];
-    for (NSString *file in @[@"status.json",@"launch.json",@"memory-check.json",@"memory-check-launch.json"]) {
+    for (NSString *file in @[@"status.json",@"startup.json",@"launch.json",@"memory-check.json",@"memory-check-launch.json"]) {
         NSDictionary *record=NSPReadJSON(file);if (!record) continue;
         NSData *data=[NSJSONSerialization dataWithJSONObject:record options:NSJSONWritingPrettyPrinted|NSJSONWritingSortedKeys error:nil];
         [summary appendFormat:@"%@\n%@\n\n",file,[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]];
@@ -484,9 +485,11 @@ static UIColor *NSPCardColor(void) {return [UIColor colorWithRed:0.075 green:0.1
     NSPLaunchReport(@"child_created",@"test",0,123,nil);[self refresh];
     check(![self.status.text isEqualToString:@"悬浮层已响应"],@"stale heartbeat cannot report an active HUD");
     self.pages.selectedSegmentIndex=2;[self renderPage];
-    NSPWriteJSON(@"memory-check.json",@{@"stage":@"completed",@"game_control":@{@"port_acquired":@NO,@"task_for_pid_return":@5}});
+    NSPWriteJSON(@"memory-check.json",@{@"version":NSPVersion,@"stage":@"completed",@"game_control":@{@"port_acquired":@NO,@"task_for_pid_return":@5}});
     NSPWriteJSON(@"memory-check-launch.json",@{@"exit_code":@0});[self refresh];
     check([self.memoryStatus.text containsString:@"未取得游戏控制端口"],@"probe exit zero cannot report control-port success");
+    NSPWriteJSON(@"memory-check.json",@{@"version":@"0.2.0",@"game_control":@{@"port_acquired":@YES}});[self refresh];
+    check([self.memoryStatus.text containsString:@"旧版本"],@"older probe results are explicitly marked stale");
     for (NSInteger i=0;i<4;++i) {
         self.pages.selectedSegmentIndex=i;[self renderPage];[self.view layoutIfNeeded];
         check(self.content.bounds.size.width>0 && self.content.bounds.size.width<=self.scroll.bounds.size.width &&
@@ -501,14 +504,17 @@ static UIColor *NSPCardColor(void) {return [UIColor colorWithRed:0.075 green:0.1
     check(catalog.count==7 && [catalog[3][@"status"] isEqualToString:@"不在移植范围"],@"bundled capability catalog identifies unavailable aiming");
     BOOL previousPrepared=NSPEventLoopPrepared;NSDictionary *previousBootstrap=NSPEventBootstrapReport;
     NSPBootstrapApplicationMock *applicationMock=[NSPBootstrapApplicationMock new];NSPDispatcherMock *dispatcherMock=[NSPDispatcherMock new];
-    applicationMock.eventDispatcher=dispatcherMock;NSPPrepareHUDInput(applicationMock,NSPFetcherMock.class,NO);
-    check(dispatcherMock.installed && NSPEventLoopPrepared && [applicationMock.eventFetcher eventFetcherSink]==dispatcherMock,
-        @"event setup connects the dispatcher, fetcher sink and application");
-    NSPHiddenDispatcherMock *hiddenDispatcher=[NSPHiddenDispatcherMock new];applicationMock.eventDispatcher=hiddenDispatcher;
-    NSPPrepareHUDInput(applicationMock,NSPFetcherMock.class,NO);
-    check(!NSPEventLoopPrepared && hiddenDispatcher.eventFetcher && applicationMock.eventFetcher==hiddenDispatcher.eventFetcher &&
-        [hiddenDispatcher.eventFetcher eventFetcherSink]==hiddenDispatcher,
-        @"a hidden installer selector does not skip fetcher setup or claim run-loop success");
+    applicationMock.eventDispatcher=dispatcherMock;NSPPrepareHUDInput(applicationMock,NSPFetcherMock.class);
+    check(!NSPEventLoopPrepared && [applicationMock.eventFetcher eventFetcherSink]==dispatcherMock &&
+        [NSPEventBootstrapReport[@"fetcher_connected"] boolValue] && ![NSPEventBootstrapReport[@"runloop_installer_called"] boolValue],
+        @"receiver connects without invoking or claiming a run-loop installer");
+    id firstFetcher=applicationMock.eventFetcher;NSPPrepareHUDInput(applicationMock,NSPFetcherMock.class);
+    check(applicationMock.eventFetcher==firstFetcher && dispatcherMock.eventFetcher==firstFetcher &&
+        [NSPEventBootstrapReport[@"fetcher_reused"] boolValue],@"existing system receiver is reused without replacement");
+    NSPFetcherMock *otherFetcher=[NSPFetcherMock new];dispatcherMock.eventFetcher=otherFetcher;
+    NSPPrepareHUDInput(applicationMock,NSPFetcherMock.class);
+    check(applicationMock.eventFetcher==firstFetcher && dispatcherMock.eventFetcher==otherFetcher &&
+        [NSPEventBootstrapReport[@"reason"] isEqual:@"existing_receivers_differ"],@"conflicting receivers remain unchanged");
     NSPEventLoopPrepared=previousPrepared;NSPEventBootstrapReport=previousBootstrap;
     NSPWidgetLayer *widgets=[[NSPWidgetLayer alloc] initWithFrame:CGRectMake(0,0,844,390)];
     NSPCanvas *testCanvas=[[NSPCanvas alloc] initWithFrame:widgets.bounds];widgets.canvas=testCanvas;
@@ -562,7 +568,7 @@ static UIColor *NSPCardColor(void) {return [UIColor colorWithRed:0.075 green:0.1
         @"controller position nudges move button and radar independently without overlay touch access");
     [NSFileManager.defaultManager removeItemAtPath:NSPPath(@"overlay-layout.json") error:nil];
     self.settings=[original mutableCopy];[self save];
-    for (NSString *name in @[@"status.json",@"launch.json",@"memory-check.json",@"memory-check-launch.json"])
+    for (NSString *name in @[@"status.json",@"startup.json",@"launch.json",@"memory-check.json",@"memory-check-launch.json"])
         [NSFileManager.defaultManager removeItemAtPath:NSPPath(name) error:nil];
     self.pages.selectedSegmentIndex=0;[self renderPage];
     [self startHUD];[self stopHUD];

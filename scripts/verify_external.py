@@ -61,7 +61,7 @@ with zipfile.ZipFile('out/FanProMAX-iOS.ipa') as z:
     prefix='Payload/FanProMAX.app/'
     info=plistlib.loads(z.read(prefix+'Info.plist'))
     assert info['CFBundleIdentifier']=='io.github.zengwantin.fanpromax' and info['MinimumOSVersion']=='17.0'
-    assert info['CFBundleShortVersionString']=='0.2.1' and info['CFBundleDisplayName']=='FanProMAX'
+    assert info['CFBundleShortVersionString']=='0.2.2' and info['CFBundleDisplayName']=='FanProMAX'
     assert info['CFBundleIcons']['CFBundlePrimaryIcon']['CFBundleIconName']=='AppIcon'
     assert prefix+'Assets.car' in z.namelist()
     # actool stores the 3x rendition in Assets.car; its standalone fallback is 2x.
@@ -126,3 +126,11 @@ report=dict(app_version=info['CFBundleShortVersionString'],bundle_id=info['CFBun
 pathlib.Path('out/external-build-info.json').write_text(json.dumps({**report,'commit':os.environ['GITHUB_SHA'],
     'run_url':f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"},indent=2)+'\n')
 print(json.dumps(report,indent=2))
+
+# Device crash regression: the helper may not infer/call code found in UIKit instructions.
+source=pathlib.Path('apps/ExternalPort/main.mm').read_text()+pathlib.Path('apps/ExternalPort/EventBootstrap.inc').read_text()
+for forbidden in ('findEventLoopInstaller','NSPReadableCode','NSPCallableCode','NSPHUDApplication','_installEventRunLoopSources:'):
+    assert forbidden not in source, forbidden
+assert 'instantiate(UIApplication.class)' in source
+assert 'NSPStartup(@"hosting_begin")' in source and 'NSPStartup(@"receiver_setup_begin")' in source
+print('PASS: generic UIApplication startup, no system-code lookup or inferred installer call')
