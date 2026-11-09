@@ -1,6 +1,6 @@
 # FanProMAX iOS
 
-新增交付：[内置 i3：驾驶位识别与速度实测](https://github.com/zengwantin-rgb/fanpromax-ios/releases/tag/integrated-f23779df4343)，源码 `f23779df43434ddcdc912cc5df971e1e8c5a6060`。[云端任务](https://github.com/zengwantin-rgb/fanpromax-ios/actions/runs/42718652283)的构建、回归、UIKit及发布核对全部通过。按用户最新要求仓库已公开。i3补充控制器直接持有载具的驾驶位路径，检查归属、世界、对象代数和物理组件；实际飞行待设备确认。用户报告i2加速没有体感变化，不能视为加速成功；i3新增原生最终速度上限、本地速度及位移窗口以继续定位，不承诺实际3倍。自瞄和压枪排除，无敌、减伤未实现。源码位于 `analysis/integrated-controls`，[草稿PR #1](https://github.com/zengwantin-rgb/fanpromax-ios/pull/1)待设备反馈，外置App保持独立。
+新增交付：[内置 i3.1：驾驶位识别与速度实测](https://github.com/zengwantin-rgb/fanpromax-ios/releases/tag/integrated-fbc61adcf6ed)，源码 `fbc61adcf6edb0f1644502f25736659d1e07e529`。[云端任务](https://github.com/zengwantin-rgb/fanpromax-ios/actions/runs/42720532422)的构建、回归、UIKit及发布核对全部通过。按用户最新要求仓库已公开。i3.1补充控制器直接持有载具的驾驶位路径，检查归属、世界、对象代数和物理组件；实际飞行待设备确认。用户报告i2加速没有体感变化，不能视为加速成功；i3.1新增原生最终速度上限、本地速度及最近90个位移窗口以继续定位，避免停步导出覆盖行走记录，不承诺实际3倍。自瞄和压枪排除，无敌、减伤未实现。源码位于 `analysis/integrated-controls`，[草稿PR #1](https://github.com/zengwantin-rgb/fanpromax-ios/pull/1)待设备反馈，外置App保持独立。
 
 当前交付：[0.2.3 接收器兼容测试版](https://github.com/zengwantin-rgb/fanpromax-ios/releases/tag/ios-8ee16dcbaeb2)，编译源码 `8ee16dcbaeb22cc2ae00b4418d1903aa101a5f0c`。[GitHub 托管 macOS 任务](https://github.com/zengwantin-rgb/fanpromax-ios/actions/runs/42702714898)的设备构建、常规/大字号UIKit和发布核对全部成功；195个签名页及IPA CRC通过，云端发布器核对源码一致性和附件摘要。接收器对象编码兼容、KVC与读回分支测试通过；服务器未运行编译、测试或交付验证。0.2.2 新设备日志中窗口托管返回且约82秒后仍有心跳，触摸事件为0、接收器未接通。0.2.3 的真实设备触摸效果仍待确认。
 
