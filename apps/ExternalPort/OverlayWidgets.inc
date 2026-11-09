@@ -31,7 +31,7 @@ static CGPoint NSPBoundCenter(CGPoint p,CGSize size,CGSize bounds) {
     BOOL ready=[self.options[@"sampling"] boolValue] && self.snapshot && self.snapshot->cameraReady;
     if (ready) for (const auto &marker:self.snapshot->markers) {
         if (marker.kind!=nsport::Kind::character ||
-            (marker.relation==nsport::Relation::teammate && [self.options[@"hide_teammates"] boolValue])) continue;
+            !nsport::displayCharacter(marker,[self.options[@"hide_teammates"] boolValue],[self.options[@"hide_bots"] boolValue])) continue;
         nsport::Point p;if (!nsport::radarOffset(marker.position,self.snapshot->camera,(float)range,p)) continue;
         CGContextSetFillColorWithColor(c,NSPCharacterColor(marker).CGColor);
         CGContextFillEllipseInRect(c,CGRectMake(center.x+p.x*r-2.5,center.y+p.y*r-2.5,5,5));++count;

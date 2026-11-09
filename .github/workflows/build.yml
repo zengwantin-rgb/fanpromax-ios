@@ -32,7 +32,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "ios-${GITHUB_SHA:0:12}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title 'FanProMAX iOS 0.1.0 · 巨魔外置显示基础版' --notes '目标：iPhone 15 Pro Max / iOS 17.0 / TrollStore。提供独立显示、雷达与诊断；不是APK全功能转换，自瞄/追踪/写入等尚未移植。新应用身份下的实际读取与跨应用悬浮须设备验证。' out/FanProMAX-iOS.ipa out/package-report.json out/SHA256SUMS out/FanProMAX-README.zh-CN.md out/FanProMAX-ThirdPartyNotices.txt out/apk-features.json
+          gh release create "ios-${GITHUB_SHA:0:12}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title 'FanProMAX iOS 0.2.0 · 筛选与配置迁移' --notes '目标：iPhone 15 Pro Max / iOS 17.0 / TrollStore。提供独立显示、雷达、人机筛选、标记距离、筛选人数及显示配置导入导出。自瞄和压枪排除；不是APK全功能转换，其他写入类功能尚未移植。新应用身份下的实际读取与跨应用悬浮须设备验证。' out/FanProMAX-iOS.ipa out/package-report.json out/SHA256SUMS out/FanProMAX-README.zh-CN.md out/FanProMAX-ThirdPartyNotices.txt out/apk-features.json
   ui:
     if: ${{ !inputs.checked_run }}
     runs-on: macos-15-intel

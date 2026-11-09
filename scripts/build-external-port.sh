@@ -12,7 +12,7 @@ xcrun clang++ -std=c++17 -Wall -Wextra -Werror -UNDEBUG -fsanitize=address,undef
   -Isrc src/PortCore.cpp src/RemoteImage.cpp tests/remote_image_tests.cpp -o build/remote-image-tests
 build/remote-image-tests | tee out/remote-image-tests.txt
 xcrun clang++ -std=c++17 -Wall -Wextra -Werror -fobjc-arc -fsanitize=address,undefined \
-  apps/ExternalPort/MemoryCheck.mm -framework Foundation -framework Security -o build/memory-check-host
+  apps/ExternalPort/MemoryCheck.mm -framework Foundation -framework Security -framework UniformTypeIdentifiers -o build/memory-check-host
 build/memory-check-host --self-test | tee out/memory-check-host-tests.txt
 task_flags=(-arch arm64 -isysroot "$task_sdk_path" -miphoneos-version-min=17.0 -std=c++17 -O2 -Wall -Wextra -Werror -Isrc -Iapps/ExternalPort)
 xcrun --sdk iphoneos clang++ "${task_flags[@]}" -c src/RemoteImage.cpp -o build/ExternalRemoteImage.o
@@ -20,13 +20,13 @@ xcrun --sdk iphoneos clang++ "${task_flags[@]}" -fobjc-arc -c apps/ExternalPort/
 xcrun --sdk iphoneos clang++ "${task_flags[@]}" -fobjc-arc -c apps/ExternalPort/main.mm -o build/ExternalMain.o
 xcrun --sdk iphoneos clang++ "${task_flags[@]}" -fobjc-arc -DNSP_HUD_HELPER=1 -c apps/ExternalPort/main.mm -o build/ExternalHUDMain.o
 xcrun --sdk iphoneos clang++ "${task_flags[@]}" build/PortCore.o build/ExternalRemoteImage.o build/ExternalReader.o build/ExternalMain.o \
-  -framework UIKit -framework Foundation -framework CoreGraphics -framework Security -o "$task_app_path/FanProMAX"
+  -framework UIKit -framework Foundation -framework CoreGraphics -framework Security -framework UniformTypeIdentifiers -o "$task_app_path/FanProMAX"
 xcrun --sdk iphoneos clang++ "${task_flags[@]}" build/PortCore.o build/ExternalRemoteImage.o build/ExternalReader.o build/ExternalHUDMain.o \
-  -framework UIKit -framework Foundation -framework CoreGraphics -framework Security -o "$task_app_path/FanProMAXHUD"
+  -framework UIKit -framework Foundation -framework CoreGraphics -framework Security -framework UniformTypeIdentifiers -o "$task_app_path/FanProMAXHUD"
 xcrun --sdk iphoneos clang -arch arm64 -isysroot "$task_sdk_path" -miphoneos-version-min=17.0 \
   -std=c11 -O2 -Wall -Wextra -Werror apps/ExternalPort/SpawnProbe.c -o "$task_app_path/NSPSpawnProbe"
 xcrun --sdk iphoneos clang++ "${task_flags[@]}" -fobjc-arc apps/ExternalPort/MemoryCheck.mm \
-  -framework Foundation -framework Security -o "$task_app_path/NSPMemoryCheck"
+  -framework Foundation -framework Security -framework UniformTypeIdentifiers -o "$task_app_path/NSPMemoryCheck"
 cp apps/ExternalPort/Info.plist "$task_app_path/Info.plist"
 swift scripts/render-brand.swift build/Brand.xcassets/AppIcon.appiconset
 xcrun actool build/Brand.xcassets --compile "$task_app_path" --platform iphoneos \

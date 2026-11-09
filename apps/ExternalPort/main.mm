@@ -3,6 +3,8 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #include "RemoteReader.hpp"
+#include "DisplayPolicy.hpp"
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <dlfcn.h>
 #include <spawn.h>
@@ -18,7 +20,7 @@
 extern char **environ;
 static NSString *NSPFolder;
 static NSString *const NSPStop=@"io.github.zengwantin.fanpromax.stop";
-static NSString *const NSPVersion=@"0.1.0";
+static NSString *const NSPVersion=@"0.2.0";
 #ifdef NSP_UI_PREVIEW
 static NSString *const NSPStorage=@"";
 #else
@@ -96,11 +98,10 @@ static NSDictionary *NSPDefaults(void) {
         @"boxes":@YES,@"lines":@NO,@"health":@YES,@"distances":@YES,@"names":@YES,
         @"crosshair":@YES,@"skeletons":@NO,@"orientation":@0,@"edge_indicators":@NO,@"health_bars":@YES,@"hud_status":@NO,
         @"label_scale":@1.0,@"overlay_opacity":@1.0,@"line_width":@1.2,
-        @"hide_teammates":@YES,@"radar":@YES,@"floating_button":@YES,@"radar_range":@200,@"radar_size":@140};
+        @"hide_teammates":@YES,@"hide_bots":@NO,@"display_counts":@NO,@"display_distance":@3000,@"radar":@YES,@"floating_button":@YES,@"radar_range":@200,@"radar_size":@140};
 }
-static NSDictionary *NSPSettings(void) {
+static NSDictionary *NSPNormalizedSettings(NSDictionary *stored) {
     NSMutableDictionary *settings=[NSPDefaults() mutableCopy];
-    NSDictionary *stored=NSPReadJSON(@"settings.json");
     for (NSString *key in settings.allKeys) {
         id value=stored[key];if (![value isKindOfClass:NSNumber.class]) continue;
         double number=[value doubleValue];if (!std::isfinite(number)) continue;
@@ -108,12 +109,15 @@ static NSDictionary *NSPSettings(void) {
         else if ([key isEqualToString:@"overlay_opacity"]) settings[key]=@(MAX(0.35,MIN(1.0,number)));
         else if ([key isEqualToString:@"line_width"]) settings[key]=@(MAX(0.6,MIN(2.0,number)));
         else if ([key isEqualToString:@"radar_range"]) settings[key]=@(MAX(50,MIN(500,number)));
+        else if ([key isEqualToString:@"display_distance"]) settings[key]=@(MAX(50,MIN(3000,number)));
         else if ([key isEqualToString:@"radar_size"]) settings[key]=@(MAX(100,MIN(200,number)));
         else if ([key isEqualToString:@"orientation"]) settings[key]=@(MAX(0,MIN(2,[value integerValue])));
         else settings[key]=@([value boolValue]);
     }
     return settings;
 }
+static NSDictionary *NSPSettings(void) {return NSPNormalizedSettings(NSPReadJSON(@"settings.json"));}
+#include "SettingsTransfer.inc"
 static NSDictionary *NSPCheckSpawn(BOOL root) {
     NSString *mode=root ? @"root" : @"mobile";
     NSString *path=[NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"NSPSpawnProbe"];
@@ -179,7 +183,7 @@ static UIColor *NSPCharacterColor(const nsport::Marker &marker) {
     CGContextRef c=UIGraphicsGetCurrentContext();
     if (!c) return;
     if ([o[@"hud_status"] boolValue]) {
-        NSString *status=[@"NSP · " stringByAppendingString:self.status?:@"外置显示"];
+        NSString *status=[@"FanProMAX · " stringByAppendingString:self.status?:@"外置显示"];
         [status drawInRect:CGRectMake(12,10,MAX(0,width-24),52) withAttributes:@{
             NSFontAttributeName:[UIFont monospacedSystemFontOfSize:12 weight:UIFontWeightSemibold],
             NSForegroundColorAttributeName:UIColor.whiteColor,
@@ -192,9 +196,17 @@ static UIColor *NSPCharacterColor(const nsport::Marker &marker) {
     }
     auto snapshot=self.snapshot;
     if (!snapshot || !snapshot->cameraReady || ![o[@"sampling"] boolValue]) return;
+    if ([o[@"display_counts"] boolValue]) {
+        const auto counts=nsport::displayCounts(*snapshot,[o[@"hide_teammates"] boolValue],[o[@"hide_bots"] boolValue],[o[@"display_distance"] floatValue]);
+        NSString *text=[NSString stringWithFormat:@"筛选内角色 · 真人 %u · 人机 %u · 未知 %u",counts.humans,counts.bots,counts.unknown];
+        [text drawAtPoint:CGPointMake(12,[o[@"hud_status"] boolValue] ? 65 : 10) withAttributes:@{
+            NSFontAttributeName:[UIFont monospacedSystemFontOfSize:11*labelScale weight:UIFontWeightSemibold],
+            NSForegroundColorAttributeName:UIColor.whiteColor,NSBackgroundColorAttributeName:[UIColor.blackColor colorWithAlphaComponent:0.65]}];
+    }
     for (const auto &marker:snapshot->markers) {
+        if (!nsport::displayRange(marker.position,snapshot->camera.position,[o[@"display_distance"] floatValue])) continue;
         if (marker.kind==nsport::Kind::character && ![o[@"characters"] boolValue]) continue;
-        if (marker.kind==nsport::Kind::character && marker.relation==nsport::Relation::teammate && [o[@"hide_teammates"] boolValue]) continue;
+        if (!nsport::displayCharacter(marker,[o[@"hide_teammates"] boolValue],[o[@"hide_bots"] boolValue])) continue;
         if (marker.kind==nsport::Kind::vehicle && ![o[@"vehicles"] boolValue]) continue;
         if (marker.kind==nsport::Kind::item && ![o[@"items"] boolValue]) continue;
         if (marker.kind==nsport::Kind::airdrop && ![o[@"airdrops"] boolValue]) continue;
@@ -365,7 +377,7 @@ static void NSPStopCallback(CFNotificationCenterRef center,void *observer,CFStri
     _busy=YES;BOOL skeleton=[settings[@"skeletons"] boolValue];
     nsport::SampleOptions requested;requested.skeletons=skeleton;requested.kinds=0;
     requested.hideTeammates=[settings[@"hide_teammates"] boolValue];
-    if ([settings[@"characters"] boolValue] || [settings[@"radar"] boolValue]) requested.kinds|=1;
+    if ([settings[@"characters"] boolValue] || [settings[@"radar"] boolValue] || [settings[@"display_counts"] boolValue]) requested.kinds|=1;
     if ([settings[@"vehicles"] boolValue]) requested.kinds|=2;
     if ([settings[@"items"] boolValue]) requested.kinds|=4;
     if ([settings[@"airdrops"] boolValue]) requested.kinds|=8;
@@ -410,6 +422,11 @@ static void NSPStopCallback(CFNotificationCenterRef center,void *observer,CFStri
                     extra[@"affiliation"]=@{@"local_team_known":@(result.snapshot->localTeamKnown),
                         @"teammates_hidden":@(result.snapshot->teammatesHidden),@"dead_hidden":@(result.snapshot->deadHidden),
                         @"state_unreadable":@(result.snapshot->stateUnreadable)};
+                    const auto filtered=expired ? nsport::DisplayCounts{} : nsport::displayCounts(*result.snapshot,
+                        [settings[@"hide_teammates"] boolValue],[settings[@"hide_bots"] boolValue],[settings[@"display_distance"] floatValue]);
+                    extra[@"display_policy"]=@{@"hide_bots":settings[@"hide_bots"],@"maximum_meters":settings[@"display_distance"],
+                        @"counts_requested":settings[@"display_counts"],@"humans":@(filtered.humans),@"bots":@(filtered.bots),@"unknown":@(filtered.unknown),
+                        @"scope":@"filtered_read_markers"};
                     extra[@"discovery"]=@{@"player_array_available":@(result.snapshot->playerArrayAvailable),
                         @"players_checked":@(result.snapshot->playersChecked),@"players_discovered":@(result.snapshot->playersDiscovered)};
                     extra[@"camera_ready"]=@(result.snapshot->cameraReady && !expired);extra[@"markers"]=@(expired ? 0 : result.snapshot->markers.size());

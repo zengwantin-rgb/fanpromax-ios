@@ -10,7 +10,7 @@ swiftc scripts/check-ui-capture.swift -o build/check-ui-capture
 task_sim_sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
 task_sim_flags=(-target "$(uname -m)-apple-ios17.0-simulator" -isysroot "$task_sim_sdk" -std=c++17 -O1 -Wall -Wextra -Werror -UNDEBUG -fobjc-arc -DNSP_UI_PREVIEW=1 -Isrc -Iapps/ExternalPort)
 xcrun clang++ "${task_sim_flags[@]}" src/PortCore.cpp src/RemoteImage.cpp apps/ExternalPort/RemoteReader.mm apps/ExternalPort/main.mm \
-  -framework UIKit -framework Foundation -framework CoreGraphics -framework Security -o "$task_preview_app/FanProMAX"
+  -framework UIKit -framework Foundation -framework CoreGraphics -framework Security -framework UniformTypeIdentifiers -o "$task_preview_app/FanProMAX"
 cp apps/ExternalPort/Info.plist "$task_preview_app/Info.plist"
 cp apps/ExternalPort/Features.json "$task_preview_app/Features.json"
 python3 - "$task_preview_app/Info.plist" <<'PY'

@@ -4,7 +4,7 @@ static UIColor *NSPAccent(void) {return [UIColor colorWithRed:0.25 green:0.88 bl
 static UIColor *NSPBackground(void) {return [UIColor colorWithRed:0.035 green:0.055 blue:0.085 alpha:1];}
 static UIColor *NSPCardColor(void) {return [UIColor colorWithRed:0.075 green:0.10 blue:0.14 alpha:1];}
 
-@interface NSPControl : UIViewController
+@interface NSPControl : UIViewController <UIDocumentPickerDelegate>
 @property(nonatomic,strong) NSMutableDictionary *settings;
 @property(nonatomic,strong) NSTimer *timer;
 @property(nonatomic) BOOL checkingMemory;
@@ -203,9 +203,13 @@ static UIColor *NSPCardColor(void) {return [UIColor colorWithRed:0.075 green:0.1
     UIStackView *targets=[self card:@"目标类型" subtitle:@"真人敌人红色，人机黄色。队伍或类型尚未确认时使用橙色，避免误认。"];
     [self toggleRow:@"characters" title:@"角色" detail:nil card:targets];[self separator:targets];
     [self toggleRow:@"hide_teammates" title:@"隐藏队友" detail:@"确认同队后隐藏全部标记" card:targets];[self separator:targets];
+    [self toggleRow:@"hide_bots" title:@"忽略人机" detail:@"标记与雷达都隐藏已确认人机；未知类型仍保留" card:targets];[self separator:targets];
     [self toggleRow:@"vehicles" title:@"载具" detail:nil card:targets];[self separator:targets];
     [self toggleRow:@"airdrops" title:@"空投" detail:@"紫色标记，独立于地面物资" card:targets];[self separator:targets];
     [self toggleRow:@"items" title:@"物资" detail:@"实验性" card:targets];
+    UIStackView *range=[self card:@"显示范围与人数" subtitle:@"距离只限制世界标记，雷达使用自己的范围。人数为当前筛选和距离内已读取的角色，不代表全图总人数。"];
+    [self sliderRow:@"display_distance" title:@"标记最远距离" minimum:50 maximum:3000 card:range];[self separator:range];
+    [self toggleRow:@"display_counts" title:@"筛选内角色人数" detail:@"按真人、人机、未知分别统计，默认关闭" card:range];
     UIStackView *labels=[self card:@"标记信息" subtitle:nil];
     for (NSArray *entry in @[@[@"names",@"姓名"],@[@"distances",@"距离"],@[@"health",@"血量数值"],@[@"health_bars",@"血量条"]]) {
         if (labels.arrangedSubviews.count) [self separator:labels];
@@ -243,7 +247,7 @@ static UIColor *NSPCardColor(void) {return [UIColor colorWithRed:0.075 green:0.1
 }
 - (void)featuresPage {
     [self.content addArrangedSubview:[self label:@"功能进度" size:27 weight:UIFontWeightBold color:UIColor.whiteColor]];
-    [self.content addArrangedSubview:[self label:@"iOS 0.1.0 提供外置显示基础。Android APK 的功能不会因安装 IPA 自动获得。" size:13 weight:UIFontWeightRegular color:UIColor.secondaryLabelColor]];
+    [self.content addArrangedSubview:[self label:@"iOS 0.2.0 提供外置显示、筛选和配置迁移。Android APK 的功能不会因安装 IPA 自动获得。" size:13 weight:UIFontWeightRegular color:UIColor.secondaryLabelColor]];
     NSData *data=[NSData dataWithContentsOfFile:[NSBundle.mainBundle pathForResource:@"Features" ofType:@"json"]];
     id entries=data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
     if (![entries isKindOfClass:NSArray.class]) {
@@ -258,6 +262,10 @@ static UIColor *NSPCardColor(void) {return [UIColor colorWithRed:0.075 green:0.1
 - (void)toolsPage {
     [self.content addArrangedSubview:[self label:@"工具与支持" size:27 weight:UIFontWeightBold color:UIColor.whiteColor]];
     [self.content addArrangedSubview:[self label:@"查看实际状态，保留可追溯的诊断记录。" size:13 weight:UIFontWeightRegular color:UIColor.secondaryLabelColor]];
+    UIStackView *configuration=[self card:@"显示配置" subtitle:@"仅包含本工具的显示参数，不包含账号、凭据或游戏数据。导入不会开启或关闭游戏读取。"];
+    [configuration addArrangedSubview:[self button:@"导出显示配置" symbol:@"square.and.arrow.up" action:@selector(exportConfig) primary:NO]];
+    [self separator:configuration];
+    [configuration addArrangedSubview:[self button:@"导入显示配置" symbol:@"square.and.arrow.down" action:@selector(importConfig) primary:NO]];
     UIStackView *diagnostics=[self card:@"运行诊断" subtitle:nil];diagnostics.spacing=10;
     [diagnostics addArrangedSubview:[self button:@"查看诊断详情" symbol:@"waveform.path.ecg" action:@selector(showDiagnostics) primary:NO]];
     [diagnostics addArrangedSubview:[self button:@"导出状态文件" symbol:@"square.and.arrow.up" action:@selector(shareStatus) primary:NO]];
@@ -268,7 +276,7 @@ static UIColor *NSPCardColor(void) {return [UIColor colorWithRed:0.075 green:0.1
     UIStackView *about=[self card:@"版本与适配" subtitle:nil];about.spacing=10;
     [about addArrangedSubview:[self label:[NSString stringWithFormat:@"FanProMAX %@\nNEW STATE 0.9.98（804）\n目标范围 <3000 米 · 相机三维距离\niPhone 15 Pro Max · iOS 17.0 · TrollStore",NSPVersion]
         size:14 weight:UIFontWeightMedium color:UIColor.labelColor]];
-    [about addArrangedSubview:[self label:@"普通个人证书签名无法提供本工具所需权限。\n自瞄、内存修改与检测屏蔽尚未实现。"
+    [about addArrangedSubview:[self label:@"普通个人证书签名无法提供本工具所需权限。\n自瞄与压枪不在移植范围；游戏内存修改尚未实现。"
         size:12 weight:UIFontWeightRegular color:UIColor.secondaryLabelColor]];
     [about addArrangedSubview:[self button:@"查看发布记录" symbol:@"arrow.up.right.square" action:@selector(openReleases) primary:NO]];
     [self.content addArrangedSubview:[self label:@"HUD 启动与窗口托管参考 Lessica/TrollSpeed（MIT）。许可随安装包提供。"
@@ -293,7 +301,7 @@ static UIColor *NSPCardColor(void) {return [UIColor colorWithRed:0.075 green:0.1
 - (void)updateSliderValue:(NSString *)key {
     float value=[self.settings[key] floatValue];
     self.values[key].text=[key isEqualToString:@"overlay_opacity"] ? [NSString stringWithFormat:@"%.0f%%",value*100] :
-        [key isEqualToString:@"radar_range"] ? [NSString stringWithFormat:@"%.0f m",value] :
+        ([key isEqualToString:@"radar_range"] || [key isEqualToString:@"display_distance"]) ? [NSString stringWithFormat:@"%.0f m",value] :
         [key isEqualToString:@"radar_size"] ? [NSString stringWithFormat:@"%.0f pt",value] :
         [key isEqualToString:@"line_width"] ? [NSString stringWithFormat:@"%.1f pt",value] : [NSString stringWithFormat:@"%.1f×",value];
 }
@@ -364,6 +372,51 @@ static UIColor *NSPCardColor(void) {return [UIColor colorWithRed:0.075 green:0.1
         [text.trailingAnchor constraintEqualToAnchor:details.view.trailingAnchor]]];
     [self.navigationController pushViewController:details animated:YES];
 }
+- (void)configMessage:(NSString *)message {
+    void (^present)(void)=^{
+        UIAlertController *alert=[UIAlertController alertControllerWithTitle:@"显示配置" message:message preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
+    };
+    if ([self.presentedViewController isKindOfClass:UIDocumentPickerViewController.class])
+        [self dismissViewControllerAnimated:YES completion:present];
+    else present();
+}
+- (void)exportConfig {
+    NSError *error=nil;NSData *data=NSPEncodeSettings(self.settings,&error);
+    NSURL *url=[NSURL fileURLWithPath:NSPPath(@"FanProMAX-display.json")];
+    if (!data || ![data writeToURL:url options:NSDataWritingAtomic error:&error]) {
+        [self configMessage:error.localizedDescription?:@"配置导出失败。"];return;
+    }
+    UIActivityViewController *share=[[UIActivityViewController alloc] initWithActivityItems:@[url] applicationActivities:nil];
+    share.popoverPresentationController.sourceView=self.view;
+    share.popoverPresentationController.sourceRect=CGRectMake(self.view.bounds.size.width/2,self.view.bounds.size.height/2,1,1);
+    [self presentViewController:share animated:YES completion:nil];
+}
+- (void)importConfig {
+    UIDocumentPickerViewController *picker=[[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[UTTypeJSON] asCopy:YES];
+    picker.allowsMultipleSelection=NO;picker.delegate=self;[self presentViewController:picker animated:YES completion:nil];
+}
+- (BOOL)applyImportedConfig:(NSData *)data error:(NSError **)error {
+    NSDictionary *next=NSPDecodeSettings(data,self.settings,error);if (!next) return NO;
+    NSData *encoded=[NSJSONSerialization dataWithJSONObject:next options:NSJSONWritingPrettyPrinted error:error];
+    if (!encoded || ![encoded writeToFile:NSPPath(@"settings.json") options:NSDataWritingAtomic error:error]) return NO;
+    [NSFileManager.defaultManager setAttributes:@{NSFilePosixPermissions:@0644} ofItemAtPath:NSPPath(@"settings.json") error:nil];
+    self.settings=[next mutableCopy];[self renderPage];return YES;
+}
+- (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
+    (void)controller;NSURL *url=urls.firstObject;if (!url) return;
+    if (!url.isFileURL) {[self configMessage:@"请选择本地 JSON 配置文件。"];return;}
+    BOOL scoped=[url startAccessingSecurityScopedResource];NSError *error=nil;
+    NSFileHandle *file=[NSFileHandle fileHandleForReadingFromURL:url error:&error];
+    NSData *data=file ? [file readDataUpToLength:65537 error:&error] : nil;
+    [file closeAndReturnError:nil];if (scoped) [url stopAccessingSecurityScopedResource];
+    if (!data || ![self applyImportedConfig:data error:&error]) {
+        [self configMessage:error.localizedDescription?:@"无法读取显示配置。"];return;
+    }
+    [self configMessage:@"显示配置已导入，游戏读取开关保持原值。"];
+}
+- (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller {(void)controller;}
 - (void)openReleases {
     [UIApplication.sharedApplication openURL:[NSURL URLWithString:@"https://github.com/zengwantin-rgb/fanpromax-ios/releases"] options:@{} completionHandler:nil];
 }
@@ -402,6 +455,22 @@ static UIColor *NSPCardColor(void) {return [UIColor colorWithRed:0.075 green:0.1
     check(![NSPSettings()[@"names"] boolValue] && self.presets.selectedSegmentIndex==UISegmentedControlNoSegment,@"manual switch persists and clears preset selection");
     UISlider *slider=self.sliders[@"overlay_opacity"];slider.value=0.5;[self sliderChanged:slider];
     check([self.values[@"overlay_opacity"].text isEqualToString:@"50%"] && [NSPSettings()[@"overlay_opacity"] doubleValue]==0.5,@"style slider updates label and persistent value");
+    self.settings[@"hide_bots"]=@YES;self.settings[@"display_distance"]=@200;self.settings[@"sampling"]=@NO;[self save];
+    NSError *configError=nil;NSData *exported=NSPEncodeSettings(self.settings,&configError);
+    NSDictionary *envelope=[NSJSONSerialization JSONObjectWithData:exported options:0 error:nil];
+    check(exported && !envelope[@"settings"][@"sampling"],@"export excludes the game-reading request");
+    NSMutableDictionary *currently=[self.settings mutableCopy];currently[@"sampling"]=@YES;
+    NSDictionary *imported=NSPDecodeSettings(exported,currently,&configError);
+    check([imported[@"hide_bots"] boolValue] && [imported[@"display_distance"] intValue]==200 && [imported[@"sampling"] boolValue],@"preference round trip preserves the current game-reading state");
+    NSMutableDictionary *malformed=[envelope mutableCopy];malformed[@"settings"]=@{@"display_distance":@"bad"};
+    NSData *bad=[NSJSONSerialization dataWithJSONObject:malformed options:0 error:nil];NSDictionary *beforeImport=[NSPSettings() copy];
+    check(![self applyImportedConfig:bad error:&configError] && [NSPSettings() isEqual:beforeImport],@"invalid imported preferences leave saved settings unchanged");
+    malformed[@"settings"]=@{@"display_distance":@9999,@"sampling":@YES};
+    NSData *clamped=[NSJSONSerialization dataWithJSONObject:malformed options:0 error:nil];imported=NSPDecodeSettings(clamped,self.settings,&configError);
+    check([imported[@"display_distance"] intValue]==3000 && ![imported[@"sampling"] boolValue],@"range import clamps bounds and cannot enable sampling");
+    malformed[@"schema"]=@2;
+    check(!NSPDecodeSettings([NSJSONSerialization dataWithJSONObject:malformed options:0 error:nil],self.settings,&configError),@"unsupported configuration schemas are rejected");
+    check(!NSPDecodeSettings([NSMutableData dataWithLength:65537],self.settings,&configError),@"oversized configurations are rejected before JSON parsing");
     self.pages.selectedSegmentIndex=0;[self renderPage];
     NSPLaunchReport(@"child_created",@"test",0,123,nil);[self refresh];
     check([self.status.text isEqualToString:@"正在启动…"],@"process creation alone is not reported as HUD response");
@@ -425,7 +494,7 @@ static UIColor *NSPCardColor(void) {return [UIColor colorWithRed:0.075 green:0.1
     check(self.pages.numberOfSegments==4 && self.toggles.count==0 && self.sliders.count==0,@"unported functions expose no active controls");
     NSData *catalogData=[NSData dataWithContentsOfFile:[NSBundle.mainBundle pathForResource:@"Features" ofType:@"json"]];
     NSArray *catalog=catalogData ? [NSJSONSerialization JSONObjectWithData:catalogData options:0 error:nil] : nil;
-    check(catalog.count==7 && [catalog[3][@"status"] isEqualToString:@"尚未移植"],@"bundled capability catalog identifies unavailable aiming");
+    check(catalog.count==7 && [catalog[3][@"status"] isEqualToString:@"不在移植范围"],@"bundled capability catalog identifies unavailable aiming");
     NSPWidgetLayer *widgets=[[NSPWidgetLayer alloc] initWithFrame:CGRectMake(0,0,844,390)];
     NSPCanvas *testCanvas=[[NSPCanvas alloc] initWithFrame:widgets.bounds];widgets.canvas=testCanvas;
     [widgets insertSubview:testCanvas atIndex:0];[widgets updateWithOptions:NSPDefaults()];

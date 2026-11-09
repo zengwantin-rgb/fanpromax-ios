@@ -56,12 +56,12 @@ for filename in ('external-imports.txt','external-hud-imports.txt','external-pro
 with zipfile.ZipFile('out/FanProMAX-iOS.ipa') as z:
     assert z.testzip() is None
     features=json.loads(z.read('Payload/FanProMAX.app/Features.json'))
-    assert len(features)==7 and features[3]['status']=='尚未移植'
+    assert len(features)==7 and features[3]['status']=='不在移植范围'
     assert not any(n.endswith(('.dylib','embedded.mobileprovision')) or '.framework/' in n for n in z.namelist())
     prefix='Payload/FanProMAX.app/'
     info=plistlib.loads(z.read(prefix+'Info.plist'))
     assert info['CFBundleIdentifier']=='io.github.zengwantin.fanpromax' and info['MinimumOSVersion']=='17.0'
-    assert info['CFBundleShortVersionString']=='0.1.0' and info['CFBundleDisplayName']=='FanProMAX'
+    assert info['CFBundleShortVersionString']=='0.2.0' and info['CFBundleDisplayName']=='FanProMAX'
     assert info['CFBundleIcons']['CFBundlePrimaryIcon']['CFBundleIconName']=='AppIcon'
     assert prefix+'Assets.car' in z.namelist()
     # actool stores the 3x rendition in Assets.car; its standalone fallback is 2x.
