@@ -1,5 +1,7 @@
 # FanProMAX iOS
 
+新增交付：[内置 i1 IPA：人物加速与飞车试验](https://github.com/zengwantin-rgb/fanpromax-ios/releases/tag/integrated-9ac6158aaa63)，源码 `9ac6158aaa63d547e21aebf6cbbb4fd1162c27d5`。[云端任务](https://github.com/zengwantin-rgb/fanpromax-ios/actions/runs/42710519212)的设备构建、UIKit及发布核对全部通过，游戏启动、实际净速度和飞车效果仍待真机确认。自瞄和压枪排除；无敌、减伤尚未实现。内置模块源码暂独立保存在 `analysis/integrated-controls`，[草稿PR #1](https://github.com/zengwantin-rgb/fanpromax-ios/pull/1)待设备反馈；现有外置App保留。
+
 当前交付：[0.2.3 接收器兼容测试版](https://github.com/zengwantin-rgb/fanpromax-ios/releases/tag/ios-8ee16dcbaeb2)，编译源码 `8ee16dcbaeb22cc2ae00b4418d1903aa101a5f0c`。[GitHub 托管 macOS 任务](https://github.com/zengwantin-rgb/fanpromax-ios/actions/runs/42702714898)的设备构建、常规/大字号UIKit和发布核对全部成功；195个签名页及IPA CRC通过，云端发布器核对源码一致性和附件摘要。接收器对象编码兼容、KVC与读回分支测试通过；服务器未运行编译、测试或交付验证。0.2.2 新设备日志中窗口托管返回且约82秒后仍有心跳，触摸事件为0、接收器未接通。0.2.3 的真实设备触摸效果仍待确认。
 
 先停止旧悬浮层，再通过TrollStore覆盖安装。轻点按钮测试收起/恢复，直接拖动按钮测试位置保存；雷达需长按按钮至少0.6秒后松开解锁。测试后保持悬浮层运行，等约2秒，再从工具导出status.json等文件。
