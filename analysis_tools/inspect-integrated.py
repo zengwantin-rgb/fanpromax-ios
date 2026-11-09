@@ -17,7 +17,7 @@ names=('CharacterMovement','MaxWalkSpeed','MaxWalkSpeedCrouched','MaxAcceleratio
  'DamageReduction','DamageMultiplier','DamageScale','DamageRate','Invincible','Invincibility','GodMode',
  'bInvulnerable','bInvincible','DamageComponent','HealthComponent','bIsInvincible','IsInvincible',
  'Armor','ArmorDamageReduction','ServerApplyDamage','ApplyDamage','Role','LocalRole','RemoteRole','HasAuthority')
-m.main(exact_names=names,focus_entries=(0x1c6cc90,0x504f328,0x359be28,0x35a9ab0,0x3a0c86c,0x22d23e4,0x505566c,0x57a8194,0x3a0de18,0x59a46f4,0x59a1a00,0x5977738,0x4ede944,0x35173fc,0x3189170),
+m.main(exact_names=names,focus_entries=(0x1c6cc90,0x504f328,0x359be28,0x35a9ab0,0x3a0c86c,0x22d23e4,0x505566c,0x57a8194,0x3a0de18,0x59a46f4,0x59a1a00,0x5977738,0x4ede944,0x35173fc,0x3189170,0x59a0718,0x1ca7564,0x1ca66ec),
  dispatch_focus=(),output='out/integrated-survey',
  discovery_pattern=r'(?:Invinc|Invulner|GodMode|DamageReduction|DamageMultiplier|DamageScale|DamageRate|MaxFlySpeed|Vehicle.*(?:Gravity|Velocity|Movement|Driver)|CanBeDamaged)',
  priority_names=names,context_limit=260,context_extent=0x900,context_extents={},
