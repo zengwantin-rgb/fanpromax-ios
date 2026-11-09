@@ -20,7 +20,7 @@ int main(){
     assert(lease.apply(io,f.key,0x6dc,2)==FieldResult::applied);++f.key.serial;
     auto count=f.writes;assert(lease.restore(io)==FieldResult::stale && count==f.writes);
     assert(lease.apply(io,f.key,0x6dc,std::numeric_limits<float>::quiet_NaN())==FieldResult::invalid && count==f.writes);
-    f.value=600;f.readbackFails=true;assert(lease.apply(io,f.key,0x6dc,2)==FieldResult::readbackFailed && lease.active());
+    f.value=600;f.writes=0;f.readbackFails=true;assert(lease.apply(io,f.key,0x6dc,2)==FieldResult::readbackFailed && lease.active());
     f.readbackFails=false;assert(lease.restore(io)==FieldResult::off && f.value==600);
     f.writable=false;assert(lease.apply(io,f.key,0x6dc,2)==FieldResult::writeFailed && f.value==600);
     f.writable=true;assert(lease.restore(io)==FieldResult::off);

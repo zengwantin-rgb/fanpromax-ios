@@ -36,7 +36,7 @@ jobs:
           build/integrated-venv/bin/python -m pip install --only-binary=:all: capstone==5.0.6
           build/integrated-venv/bin/python scripts/integrated-profile.py input/NEW_STATE_Decrypted.ipa
           module_sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
-          xcrun --sdk iphoneos clang++ -arch arm64 -isysroot "$module_sdk" -miphoneos-version-min=17.0 -std=c++17 -O2 -Wall -Wextra -Werror -fobjc-arc -fblocks -fvisibility=hidden -Isrc -Iapps/Integrated -Ibuild -dynamiclib src/PortCore.cpp apps/Integrated/CollisionProbe.cpp apps/Integrated/Runtime.mm -framework UIKit -framework Foundation -Wl,-dead_strip -Wl,-install_name,@executable_path/Frameworks/FanProIntegrated.dylib -o out/integrated/FanProIntegrated.dylib
+          xcrun --sdk iphoneos clang++ -arch arm64 -isysroot "$module_sdk" -miphoneos-version-min=17.0 -std=c++17 -O2 -Wall -Wextra -Werror -fobjc-arc -fblocks -fvisibility=hidden -Isrc -Iapps/Integrated -Ibuild -dynamiclib src/PortCore.cpp apps/Integrated/CollisionProbe.cpp apps/Integrated/Runtime.mm -framework UIKit -framework Foundation -framework CoreGraphics -Wl,-dead_strip -Wl,-install_name,@executable_path/Frameworks/FanProIntegrated.dylib -o out/integrated/FanProIntegrated.dylib
           codesign --force --sign - --timestamp=none --pagesize 4096 out/integrated/FanProIntegrated.dylib
           codesign --verify --strict out/integrated/FanProIntegrated.dylib
           build/integrated-venv/bin/python scripts/package-integrated.py input/NEW_STATE_Decrypted.ipa out/integrated/FanProIntegrated.dylib
