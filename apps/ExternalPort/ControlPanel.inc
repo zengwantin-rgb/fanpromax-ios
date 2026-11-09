@@ -161,7 +161,7 @@ static UIColor *NSPCardColor(void) {return [UIColor colorWithRed:0.075 green:0.1
     NSArray *arguments=NSProcessInfo.processInfo.arguments;NSUInteger index=[arguments indexOfObject:@"--nsp-page"];
     if (index!=NSNotFound && index+1<arguments.count) {
         NSInteger page=[arguments[index+1] integerValue];
-        if (page>=0 && page<self.pages.numberOfSegments && self.pages.selectedSegmentIndex!=page) {
+        if (page>=0 && NSUInteger(page)<self.pages.numberOfSegments && self.pages.selectedSegmentIndex!=page) {
             self.pages.selectedSegmentIndex=page;[self renderPage];
         }
     }
