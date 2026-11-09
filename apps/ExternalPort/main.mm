@@ -4,6 +4,11 @@
 #import <objc/runtime.h>
 #include "RemoteReader.hpp"
 #include "DisplayPolicy.hpp"
+#include "EventLoopLookup.hpp"
+#include <mach/mach.h>
+#if defined(__arm64e__)
+#include <ptrauth.h>
+#endif
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <dlfcn.h>
@@ -20,7 +25,7 @@
 extern char **environ;
 static NSString *NSPFolder;
 static NSString *const NSPStop=@"io.github.zengwantin.fanpromax.stop";
-static NSString *const NSPVersion=@"0.2.0";
+static NSString *const NSPVersion=@"0.2.1";
 #ifdef NSP_UI_PREVIEW
 static NSString *const NSPStorage=@"";
 #else
@@ -42,10 +47,11 @@ static NSDictionary *NSPReadJSON(NSString *name) {
     id object=[NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
     return [object isKindOfClass:NSDictionary.class] ? object : nil;
 }
-static void NSPWriteJSON(NSString *name,NSDictionary *object) {
+static BOOL NSPWriteJSON(NSString *name,NSDictionary *object) {
     NSData *data=[NSJSONSerialization dataWithJSONObject:object options:NSJSONWritingPrettyPrinted error:nil];
-    if (data && [data writeToFile:NSPPath(name) atomically:YES])
-        [NSFileManager.defaultManager setAttributes:@{NSFilePosixPermissions:@0644} ofItemAtPath:NSPPath(name) error:nil];
+    BOOL written=data && [data writeToFile:NSPPath(name) atomically:YES];
+    if (written) [NSFileManager.defaultManager setAttributes:@{NSFilePosixPermissions:@0644} ofItemAtPath:NSPPath(name) error:nil];
+    return written;
 }
 static NSDictionary *NSPRuntimePermissions(void) {
     using Create=CFTypeRef (*)(CFAllocatorRef);
@@ -286,6 +292,7 @@ static UIColor *NSPCharacterColor(const nsport::Marker &marker) {
 @end
 
 #include "OverlayWidgets.inc"
+#include "EventBootstrap.inc"
 
 @interface NSPHUDWindow : UIWindow
 @property(nonatomic,weak) NSPWidgetLayer *widgets;
@@ -462,9 +469,13 @@ static void NSPStopCallback(CFNotificationCenterRef center,void *observer,CFStri
         NSMutableDictionary *report=[extra mutableCopy]?:[NSMutableDictionary dictionary];
         report[@"overlay_hidden"]=@(self.widgets.collapsed);report[@"radar_editing"]=@(self.widgets.editing);
         report[@"overlay_interactions"]=@(self.widgets.interactions);report[@"touch_bridge_configured"]=@(NSPTouchBridgeConfigured);
-        report[@"touch_pipeline"]=@{@"event_loop_prepared":@(NSPEventLoopPrepared),@"hid_events":@(NSPHIDEvents.load()),
+        report[@"touch_pipeline"]=@{@"setup_revision":@2,@"bootstrap":NSPEventBootstrapReport?:@{},@"event_loop_prepared":@(NSPEventLoopPrepared),@"hid_events":@(NSPHIDEvents.load()),
             @"ax_decoded":@(NSPAXDecoded.load()),@"ax_failures":@(NSPAXFailures.load()),
-            @"ax_delivered":@(self.widgets.axTouches),@"uikit_delivered":@(self.widgets.uiTouches)};
+            @"ax_delivered":@(self.widgets.axTouches),@"uikit_delivered":@(self.widgets.uiTouches),
+            @"events_observed":@(NSPHIDEvents.load()>0 || self.widgets.uiTouches>0 || self.widgets.axTouches>0),
+            @"drag_started":@(self.widgets.dragStarts),@"drag_updates":@(self.widgets.dragUpdates),@"drag_finished":@(self.widgets.dragFinishes),
+            @"drag_cancelled":@(self.widgets.dragCancels),@"layout_saves":@(self.widgets.layoutSaves),@"layout_save_failures":@(self.widgets.layoutSaveFailures),
+            @"ignored_other_source":@(self.widgets.sourceConflicts),@"identity_mismatches":@(self.widgets.identityMisses),@"capture_timeouts":@(self.widgets.captureTimeouts)};
         NSPReport(status,report);
     }
 }
@@ -663,22 +674,9 @@ static void NSPStopCallback(CFNotificationCenterRef center,void *observer,CFStri
     auto instantiate=reinterpret_cast<Instantiate>(dlsym(RTLD_DEFAULT,"UIApplicationInstantiateSingleton"));
     if (!sbs || !gsInit || !bksInit || !appInit || !instantiate) {NSPReport(@"外置窗口所需的系统接口缺失",nil);return 2;}
     @try {
-        (void)NSPScreenBounds();(void)CFRunLoopGetCurrent();gsInit();bksInit();appInit();instantiate(UIApplication.class);
+        (void)NSPScreenBounds();(void)CFRunLoopGetCurrent();gsInit();bksInit();appInit();instantiate(NSPHUDApplication.class);
         static NSPHUDDelegate *delegate;delegate=[NSPHUDDelegate new];
         UIApplication *application=UIApplication.sharedApplication;application.delegate=delegate;
-        @try {
-            id dispatcher=[application valueForKey:@"eventDispatcher"];
-            SEL install=NSSelectorFromString(@"_installEventRunLoopSources:");
-            if ([dispatcher respondsToSelector:install]) {
-                NSInvocation *setup=[NSInvocation invocationWithMethodSignature:[dispatcher methodSignatureForSelector:install]];
-                CFRunLoopRef loop=CFRunLoopGetMain();setup.target=dispatcher;setup.selector=install;[setup setArgument:&loop atIndex:2];[setup invoke];
-                id fetcher=[NSClassFromString(@"UIEventFetcher") new];
-                if (fetcher) {
-                    [fetcher setValue:dispatcher forKey:@"eventFetcherSink"];[dispatcher setValue:fetcher forKey:@"eventFetcher"];
-                    [application setValue:fetcher forKey:@"eventFetcher"];NSPEventLoopPrepared=YES;
-                }
-            }
-        } @catch (__unused NSException *exception) {NSPEventLoopPrepared=NO;}
 
         if ([application respondsToSelector:@selector(_accessibilityInit)]) [application _accessibilityInit];
         [[NSBundle bundleWithPath:@"/System/Library/PrivateFrameworks/AccessibilityUtilities.framework"] load];
@@ -689,6 +687,11 @@ static void NSPStopCallback(CFNotificationCenterRef center,void *observer,CFStri
         if (registerTouch && [NSPAXClass respondsToSelector:@selector(representationWithHIDEvent:hidStreamIdentifier:)]) {
             registerTouch(NSPOverlayTouch);NSPTouchBridgeConfigured=YES;
         }
+        NSMutableDictionary *bootstrap=[NSPEventBootstrapReport mutableCopy]?:[NSMutableDictionary dictionary];
+        bootstrap[@"hid_callback_api_found"]=@(registerTouch!=nullptr);
+        bootstrap[@"ax_class_available"]=@(NSPAXClass!=Nil);
+        bootstrap[@"callback_registration_called"]=@(NSPTouchBridgeConfigured);
+        NSPEventBootstrapReport=[bootstrap copy];
         auto events=reinterpret_cast<Events>(dlsym(gs,"GSEventInitialize"));
         auto mode=reinterpret_cast<Mode>(dlsym(gs,"GSEventPushRunLoopMode"));
         if (events) events(false);if (mode) mode(kCFRunLoopDefaultMode);

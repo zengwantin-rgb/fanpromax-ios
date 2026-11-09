@@ -61,7 +61,7 @@ with zipfile.ZipFile('out/FanProMAX-iOS.ipa') as z:
     prefix='Payload/FanProMAX.app/'
     info=plistlib.loads(z.read(prefix+'Info.plist'))
     assert info['CFBundleIdentifier']=='io.github.zengwantin.fanpromax' and info['MinimumOSVersion']=='17.0'
-    assert info['CFBundleShortVersionString']=='0.2.0' and info['CFBundleDisplayName']=='FanProMAX'
+    assert info['CFBundleShortVersionString']=='0.2.1' and info['CFBundleDisplayName']=='FanProMAX'
     assert info['CFBundleIcons']['CFBundlePrimaryIcon']['CFBundleIconName']=='AppIcon'
     assert prefix+'Assets.car' in z.namelist()
     # actool stores the 3x rendition in Assets.car; its standalone fallback is 2x.

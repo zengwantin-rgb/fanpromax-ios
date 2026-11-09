@@ -20,9 +20,12 @@ report=json.loads((root/'package-report.json').read_text());assert report['commi
 assert report['archive_crc_verified'] and report['entitlements_verified'] and report['signature_pages_verified']>0
 assert not report['full_android_feature_port'] and not report['new_bundle_device_verified']
 assert not report['aim_implemented'] and not report.get('recoil_implemented',False)
-if report['app_version']=='0.2.0':
+if report['app_version'] in ('0.2.0','0.2.1'):
  assert report['settings_transfer_implemented'] and report['import_preserves_sampling_state']
  assert not report['settings_transfer_includes_credentials'] and report['aim_and_recoil_excluded']
+if report['app_version']=='0.2.1':
+ assert report['touch_setup_revision']==2 and report['uikit_system_lookup_bounded'] and report['fetcher_setup_independent']
+ assert report['drag_diagnostics_implemented'] and not report['drag_device_effect_verified']
 release=json.loads(gh('release','view',tag,'--repo',repo,'--json','apiUrl'))
 asset=api(release['apiUrl'])
 ipa=next(a for a in asset['assets'] if a['name']==report['file'])

@@ -1,6 +1,7 @@
 // Own overlay controls only. OS touch observation follows TrollSpeed's AX bridge (MIT).
 static BOOL NSPTouchBridgeConfigured=NO;
 static BOOL NSPEventLoopPrepared=NO;
+static NSDictionary *NSPEventBootstrapReport;
 static std::atomic<uint64_t> NSPHIDEvents{0},NSPAXDecoded{0},NSPAXFailures{0};
 static void NSPRouteUIKitTouches(UIView *view,NSSet<UITouch *> *touches,UITouchPhase phase);
 static CGPoint NSPBoundCenter(CGPoint p,CGSize size,CGSize bounds) {
@@ -74,6 +75,15 @@ static CGPoint NSPBoundCenter(CGPoint p,CGSize size,CGSize bounds) {
 @property(nonatomic) NSUInteger interactions;
 @property(nonatomic) NSUInteger uiTouches;
 @property(nonatomic) NSUInteger axTouches;
+@property(nonatomic) NSUInteger dragStarts;
+@property(nonatomic) NSUInteger dragUpdates;
+@property(nonatomic) NSUInteger dragFinishes;
+@property(nonatomic) NSUInteger dragCancels;
+@property(nonatomic) NSUInteger layoutSaves;
+@property(nonatomic) NSUInteger layoutSaveFailures;
+@property(nonatomic) NSUInteger sourceConflicts;
+@property(nonatomic) NSUInteger identityMisses;
+@property(nonatomic) NSUInteger captureTimeouts;
 - (void)updateWithOptions:(NSDictionary *)options;
 - (void)refreshRadar;
 - (void)activateButton;
@@ -112,7 +122,7 @@ static __weak NSPWidgetLayer *NSPActiveWidgets;
 }
 - (void)updateWithOptions:(NSDictionary *)options {
     self.options=options;NSTimeInterval now=NSProcessInfo.processInfo.systemUptime;
-    if (_activeIdentity>=0 && now-_lastTouchEvent>5) {_activeIdentity=-1;_activeTarget=0;_activeSource=nil;}
+    if (_activeIdentity>=0 && now-_lastTouchEvent>5) {++self.captureTimeouts;_activeIdentity=-1;_activeTarget=0;_activeSource=nil;}
     if (_activeIdentity<0 && now-_layoutRead>0.25) {self.placement=[NSPReadJSON(@"overlay-layout.json") mutableCopy]?:[NSMutableDictionary dictionary];_layoutRead=now;}
     self.button.hidden=![options[@"floating_button"] boolValue];if (self.button.hidden) {self.editing=NO;self.collapsed=NO;}
     self.canvas.hidden=self.collapsed;self.radar.hidden=self.collapsed || ![options[@"radar"] boolValue];
@@ -132,7 +142,7 @@ static __weak NSPWidgetLayer *NSPActiveWidgets;
     if (!std::isfinite(point.x) || !std::isfinite(point.y)) return;
     if ([source isEqualToString:@"uikit"]) ++self.uiTouches;
     else if ([source isEqualToString:@"ax"]) ++self.axTouches;
-    if (_activeIdentity>=0 && ![_activeSource isEqualToString:source]) return;
+    if (_activeIdentity>=0 && ![_activeSource isEqualToString:source]) {++self.sourceConflicts;return;}
     if (_activeIdentity==identity && _activeTarget && phase==UITouchPhaseBegan) phase=UITouchPhaseMoved;
     if (_activeIdentity<0 && phase==UITouchPhaseMoved && [source isEqualToString:@"uikit"]) phase=UITouchPhaseBegan;
     if (phase==UITouchPhaseBegan) {
@@ -142,24 +152,25 @@ static __weak NSPWidgetLayer *NSPActiveWidgets;
         _activeIdentity=identity;_activeSource=[source copy];_activeTarget=target;_touchStart=point;_centerStart=target==1 ? self.button.center : self.radar.center;
         _touchTime=NSProcessInfo.processInfo.systemUptime;_lastTouchEvent=_touchTime;_moved=NO;return;
     }
-    if (_activeIdentity!=identity || !_activeTarget) return;
+    if (_activeIdentity!=identity || !_activeTarget) {if (_activeIdentity>=0 && _activeIdentity!=identity) ++self.identityMisses;return;}
     _lastTouchEvent=NSProcessInfo.processInfo.systemUptime;
     UIView *target=_activeTarget==1 ? self.button : self.radar;
     CGFloat dx=point.x-_touchStart.x,dy=point.y-_touchStart.y;
     if (phase==UITouchPhaseMoved || phase==UITouchPhaseEnded) {
-        if (std::hypot(dx,dy)>8) _moved=YES;
-        if (_moved) target.center=NSPBoundCenter(CGPointMake(_centerStart.x+dx,_centerStart.y+dy),target.bounds.size,self.bounds.size);
+        if (std::hypot(dx,dy)>8 && !_moved) {_moved=YES;++self.dragStarts;}
+        if (_moved) {++self.dragUpdates;target.center=NSPBoundCenter(CGPointMake(_centerStart.x+dx,_centerStart.y+dy),target.bounds.size,self.bounds.size);}
         if (phase==UITouchPhaseMoved) return;
     }
     if (phase!=UITouchPhaseEnded && phase!=UITouchPhaseCancelled) return;
     NSInteger active=_activeTarget;_activeTarget=0;_activeIdentity=-1;_activeSource=nil;
-    if (phase==UITouchPhaseCancelled) {target.center=_centerStart;return;}
+    if (phase==UITouchPhaseCancelled) {++self.dragCancels;target.center=_centerStart;return;}
     ++self.interactions;
     if (_moved && self.bounds.size.width>0 && self.bounds.size.height>0) {
         NSString *prefix=active==1 ? @"button" : @"radar";
         self.placement[[prefix stringByAppendingString:@"_x"]]=@(target.center.x/self.bounds.size.width);
         self.placement[[prefix stringByAppendingString:@"_y"]]=@(target.center.y/self.bounds.size.height);
-        NSPWriteJSON(@"overlay-layout.json",self.placement);
+        ++self.dragFinishes;
+        if (NSPWriteJSON(@"overlay-layout.json",self.placement)) ++self.layoutSaves;else ++self.layoutSaveFailures;
     } else if (active==1) {
         if (NSProcessInfo.processInfo.systemUptime-_touchTime>=0.6) {self.editing=!self.editing;self.collapsed=NO;}
         else {self.collapsed=!self.collapsed;self.editing=NO;}

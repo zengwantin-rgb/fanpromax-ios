@@ -247,7 +247,7 @@ static UIColor *NSPCardColor(void) {return [UIColor colorWithRed:0.075 green:0.1
 }
 - (void)featuresPage {
     [self.content addArrangedSubview:[self label:@"功能进度" size:27 weight:UIFontWeightBold color:UIColor.whiteColor]];
-    [self.content addArrangedSubview:[self label:@"iOS 0.2.0 提供外置显示、筛选和配置迁移。Android APK 的功能不会因安装 IPA 自动获得。" size:13 weight:UIFontWeightRegular color:UIColor.secondaryLabelColor]];
+    [self.content addArrangedSubview:[self label:@"iOS 0.2.1 提供外置显示、筛选和配置迁移。Android APK 的功能不会因安装 IPA 自动获得。" size:13 weight:UIFontWeightRegular color:UIColor.secondaryLabelColor]];
     NSData *data=[NSData dataWithContentsOfFile:[NSBundle.mainBundle pathForResource:@"Features" ofType:@"json"]];
     id entries=data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
     if (![entries isKindOfClass:NSArray.class]) {
@@ -495,6 +495,17 @@ static UIColor *NSPCardColor(void) {return [UIColor colorWithRed:0.075 green:0.1
     NSData *catalogData=[NSData dataWithContentsOfFile:[NSBundle.mainBundle pathForResource:@"Features" ofType:@"json"]];
     NSArray *catalog=catalogData ? [NSJSONSerialization JSONObjectWithData:catalogData options:0 error:nil] : nil;
     check(catalog.count==7 && [catalog[3][@"status"] isEqualToString:@"不在移植范围"],@"bundled capability catalog identifies unavailable aiming");
+    BOOL previousPrepared=NSPEventLoopPrepared;NSDictionary *previousBootstrap=NSPEventBootstrapReport;
+    NSPBootstrapApplicationMock *applicationMock=[NSPBootstrapApplicationMock new];NSPDispatcherMock *dispatcherMock=[NSPDispatcherMock new];
+    applicationMock.eventDispatcher=dispatcherMock;NSPPrepareHUDInput(applicationMock,NSPFetcherMock.class,NO);
+    check(dispatcherMock.installed && NSPEventLoopPrepared && [applicationMock.eventFetcher eventFetcherSink]==dispatcherMock,
+        @"event setup connects the dispatcher, fetcher sink and application");
+    NSPHiddenDispatcherMock *hiddenDispatcher=[NSPHiddenDispatcherMock new];applicationMock.eventDispatcher=hiddenDispatcher;
+    NSPPrepareHUDInput(applicationMock,NSPFetcherMock.class,NO);
+    check(!NSPEventLoopPrepared && hiddenDispatcher.eventFetcher && applicationMock.eventFetcher==hiddenDispatcher.eventFetcher &&
+        [hiddenDispatcher.eventFetcher eventFetcherSink]==hiddenDispatcher,
+        @"a hidden installer selector does not skip fetcher setup or claim run-loop success");
+    NSPEventLoopPrepared=previousPrepared;NSPEventBootstrapReport=previousBootstrap;
     NSPWidgetLayer *widgets=[[NSPWidgetLayer alloc] initWithFrame:CGRectMake(0,0,844,390)];
     NSPCanvas *testCanvas=[[NSPCanvas alloc] initWithFrame:widgets.bounds];widgets.canvas=testCanvas;
     [widgets insertSubview:testCanvas atIndex:0];[widgets updateWithOptions:NSPDefaults()];
@@ -537,6 +548,8 @@ static UIColor *NSPCardColor(void) {return [UIColor colorWithRed:0.075 green:0.1
     [widgets routePoint:touch.point phase:UITouchPhaseEnded identity:sameID source:@"ax"];
     check(!widgets.collapsed,@"AX cannot finish or hijack a UIKit-owned gesture with the same identity");
     [widgets.button touchesEnded:touches withEvent:nil];check(widgets.collapsed,@"one physical control source activates the button only once");
+    check(widgets.dragStarts>0 && widgets.dragUpdates>0 && widgets.dragFinishes>0 && widgets.layoutSaves>0,
+        @"completed overlay drags expose movement and successful persistence evidence");
     [NSFileManager.defaultManager removeItemAtPath:NSPPath(@"overlay-layout.json") error:nil];
     self.pages.selectedSegmentIndex=1;[self renderPage];UIButton *nudge=[UIButton new];nudge.tag=1;[self nudgeOverlay:nudge];
     self.positionTarget.selectedSegmentIndex=1;nudge.tag=3;[self nudgeOverlay:nudge];
