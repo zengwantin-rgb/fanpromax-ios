@@ -34,7 +34,7 @@ for rva in roots:
  (out/name).write_text('\n'.join(hex(i.address-base)+': '+i.mnemonic+' '+i.op_str for i in instructions)+'\n')
  functions.append({'rva':hex(rva),'bytes':size,'extent_kind':'function_starts' if exact else 'bounded_context_not_proven_function_extent','file':name,'sha256':hashlib.sha256(data[offset:offset+size]).hexdigest()})
 # Find direct unsigned-offset references; object type is not inferred from an offset.
-references=[]
+references=[];contexts=[]
 for section in sections:
  if section['name']!='__text':continue
  raw=data[section['offset']:section['offset']+section['size']]
@@ -48,7 +48,8 @@ for section in sections:
   instruction=decoded[0]
   begin=max(0,index*4-256);end=min(len(raw),index*4+260)
   filename='reference-'+hex(pc)[2:]+'.asm'
-  (out/filename).write_text('\n'.join(hex(i.address-base)+': '+i.mnemonic+' '+i.op_str for i in md.disasm(raw[begin:end],section['address']+begin))+'\n')
+  contexts.append('CONTEXT '+filename+'\n'+'\n'.join(hex(i.address-base)+': '+i.mnemonic+' '+i.op_str for i in md.disasm(raw[begin:end],section['address']+begin)))
   references.append({'pc':hex(pc),'instruction':instruction.mnemonic+' '+instruction.op_str,'context':filename,'object_identity_proven':False})
+(out/'field-contexts.txt').write_text('\n\n'.join(contexts)+'\n')
 (out/'field-references.json').write_text(json.dumps(references,indent=2)+'\n')
 (out/'ios-report.json').write_text(json.dumps({'functions':functions,'input_executed':False,'runtime_cap_value_known':False,'server_behavior_verified':False},indent=2)+'\n')
