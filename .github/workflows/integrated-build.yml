@@ -26,7 +26,7 @@ jobs:
           test "$RUNNER_ENVIRONMENT" = github-hosted
           mkdir -p build out/integrated
           set -o pipefail
-          for test_name in field flight motion speed_policy; do
+          for test_name in field flight motion speed_policy flight_motion; do
             xcrun clang++ -std=c++17 -Wall -Wextra -Werror -UNDEBUG -fsanitize=address,undefined -Iapps/Integrated "tests/integrated_${test_name}_tests.cpp" -o "build/integrated-${test_name}-tests"
             "build/integrated-${test_name}-tests" | tee "out/integrated/${test_name}-tests.txt"
           done

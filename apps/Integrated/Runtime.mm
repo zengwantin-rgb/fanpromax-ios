@@ -5,6 +5,7 @@
 #include "FieldLease.hpp"
 #include "SpeedPolicyLease.hpp"
 #include "FlightLease.hpp"
+#include "FlightMotionWindow.hpp"
 #include "LocalController.hpp"
 #include "VehicleTarget.hpp"
 #include "MotionWindow.hpp"
@@ -22,6 +23,7 @@ using namespace collision_runtime;
 std::atomic<bool> speedRequested{false},flightRequested{false};
 std::atomic<int> flightDirection{0};
 fanpro::FlightLease flightLease;
+fanpro::FlightMotionWindow flightMotion;NSMutableArray *flightMotionWindows;
 NSString *flightOutcome=@"等待载具";
 uint64_t flightCalls{};
 uint64_t writeRevision{};
@@ -119,7 +121,7 @@ static void record(NSString *phase) {
         @"profile_ready":@(ready),@"last_failure":lastFailure?:@"",@"last_failure_time":@(lastFailureTime),@"profile_error":profileError?:@"",@"speed_requested":@(speedRequested.load()),
         @"selected_multiplier":@(speedTenths.load()/10.0),@"speed_field_outcome":lastOutcome?:@"",
         @"flight_requested":@(flightRequested.load()),@"flight_outcome":flightOutcome?:@"",
-        @"flight_calls":@(flightCalls),@"flight_lease_active":@(flightLease.active()),
+        @"flight_motion_windows":flightMotionWindows?:@[],@"flight_calls":@(flightCalls),@"flight_lease_active":@(flightLease.active()),
         @"invincibility_implemented":@NO,@"damage_reduction_implemented":@NO,
         @"task_count":@(taskCount),@"speed_field_writes_confirmed":@(speedWrites),
         @"walking_lease_active":@(speedPolicy.walkingActive()),@"crouching_lease_active":@(speedPolicy.crouchingActive()),@"character_cap_lease_active":@(speedPolicy.capActive()),
@@ -239,11 +241,19 @@ static void perform(uint64_t revision) {
     const auto vehicle=fanpro::readVehicleTarget(memory,owner);vehicleRoot=vehicle.body;
     details[@"flight_target_ready"]=@(vehicle.ready);details[@"flight_target_reason"]=@(vehicle.reason);details[@"flight_target_route"]=@(vehicle.route);
     details[@"flight_carrier_ready"]=@(carrierReady);
+    Vec3 flightPosition{};fanpro::Velocity observedFlightVelocity{};bool observedGravity{};
+    bool flightSample=vehicle.ready && memory.get(vehicleRoot.object+0x150,flightPosition) &&
+        velocity(nullptr,vehicleRoot,observedFlightVelocity) && gravity(nullptr,vehicleRoot,observedGravity) &&
+        std::isfinite(flightPosition.z) && std::isfinite(observedFlightVelocity.z);
+    double flightSampleTime=NSProcessInfo.processInfo.systemUptime;
+    int sampledDirection=flightDirection.load();
+    details[@"flight_motion_available"]=@(flightSample);
+    if(flightSample){details[@"flight_observed_vertical_mps"]=@(observedFlightVelocity.z/100.0);details[@"flight_observed_gravity_before_command"]=@(observedGravity);}
     details[@"flight_velocity_readback_confirmed"]=@NO;
     details[@"flight_readback_scope"]=@"immediate local physics velocity only; no sustained flight or server acceptance inferred";
     if(flightWanted && vehicle.ready) {
         if(!flightLease.active())record(@"flight_first_call_begin");
-        auto result=flightLease.apply(physics,vehicleRoot,flightDirection.load());flightOutcome=@(resultName(result));
+        auto result=flightLease.apply(physics,vehicleRoot,sampledDirection);flightOutcome=@(resultName(result));
         details[@"flight_velocity_readback_confirmed"]=@(result==fanpro::FieldResult::applied);
         if(failed(result)){lastFailure=[@"flight: " stringByAppendingString:flightOutcome];lastFailureTime=NSDate.date.timeIntervalSince1970;flightRequested.store(false);flightLease.restore(physics);record(@"flight_failure");}
     } else {
@@ -257,6 +267,23 @@ static void perform(uint64_t revision) {
         else if(revision!=requestRevision.load())flightOutcome=@"request_changed";
         else flightOutcome=@"waiting_ridden_vehicle";
     }
+    if(flightSample) {
+        double nextVelocity=[details[@"flight_velocity_readback_confirmed"] boolValue] ? sampledDirection*300.0 : observedFlightVelocity.z;
+        auto measured=flightMotion.add(vehicleRoot,flightWanted,sampledDirection,flightSampleTime,
+            flightPosition.z,observedFlightVelocity.z,nextVelocity);
+        if(measured.valid) {
+            NSDictionary *window=@{@"time":@(NSDate.date.timeIntervalSince1970),@"seconds":@(measured.seconds),@"samples":@(measured.samples),
+                @"flight_requested":@(measured.requested),@"direction":@(measured.direction),
+                @"height_change_meters":@(measured.heightChangeMeters),@"peak_rise_meters":@(measured.peakRiseMeters),
+                @"largest_downward_step_meters":@(measured.largestDropMeters),@"largest_negative_motion_residual_meters":@(measured.largestNegativeResidualMeters),
+                @"min_observed_vertical_mps":@(measured.minObservedMPS),@"max_observed_vertical_mps":@(measured.maxObservedMPS),
+                @"position_discontinuity_candidate":@(measured.discontinuityCandidate),
+                @"gravity_before_last_command":@(observedGravity),@"last_velocity_readback_confirmed":details[@"flight_velocity_readback_confirmed"],
+                @"scope":@"relative local root height and physics velocity; discontinuity can be collision, constraints or correction; server origin not established"};
+            if(!flightMotionWindows)flightMotionWindows=[NSMutableArray array];
+            [flightMotionWindows addObject:window];if(flightMotionWindows.count>90)[flightMotionWindows removeObjectAtIndex:0];
+        }
+    } else flightMotion.reset();
     NSTimeInterval now=NSDate.date.timeIntervalSince1970;
     if(now-lastLog>=1){lastLog=now;record(@"game_task_returned");}
 }
