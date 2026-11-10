@@ -1,5 +1,11 @@
 name: Build integrated movement and vehicle experiment
 on:
+  workflow_dispatch:
+    inputs:
+      publish_candidate:
+        description: 'Explicitly package and publish a device candidate after review'
+        type: boolean
+        default: false
   push:
     branches: [analysis/integrated-controls]
     paths: [apps/Integrated/**, tests/integrated_*.cpp, scripts/*integrated*, .github/workflows/integrated-build.yml]
@@ -35,7 +41,7 @@ jobs:
         run: |
           mkdir -p input
           gh release download input-newstate-0.9.98-804 --repo zwthys-cyber/newstate-ios-port --pattern NEW_STATE_Decrypted.ipa --dir input
-      - name: Validate profile, compile, sign and verify module and game package
+      - name: Validate profile, compile, sign and verify module
         run: |
           python3 -m venv build/integrated-venv
           build/integrated-venv/bin/python -m pip install --only-binary=:all: capstone==5.0.6
@@ -44,13 +50,25 @@ jobs:
           xcrun --sdk iphoneos clang++ -arch arm64 -isysroot "$module_sdk" -miphoneos-version-min=17.0 -std=c++17 -O2 -Wall -Wextra -Werror -fobjc-arc -fblocks -fvisibility=hidden -Isrc -Iapps/Integrated -Ibuild -dynamiclib src/PortCore.cpp apps/Integrated/CollisionProbe.cpp apps/Integrated/Runtime.mm -framework UIKit -framework Foundation -framework CoreGraphics -Wl,-dead_strip -Wl,-install_name,@executable_path/Frameworks/FanProIntegrated.dylib -o out/integrated/FanProIntegrated.dylib
           codesign --force --sign - --timestamp=none --pagesize 4096 out/integrated/FanProIntegrated.dylib
           codesign --verify --strict out/integrated/FanProIntegrated.dylib
-          build/integrated-venv/bin/python scripts/package-integrated.py input/NEW_STATE_Decrypted.ipa out/integrated/FanProIntegrated.dylib
-          rm -rf input build/integrated-package
+      - name: Package explicitly requested candidate
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_candidate }}
+        run: build/integrated-venv/bin/python scripts/package-integrated.py input/NEW_STATE_Decrypted.ipa out/integrated/FanProIntegrated.dylib
+      - name: Remove original input
+        if: always()
+        run: rm -rf input build/integrated-package
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: integrated-checks-${{ github.sha }}
+          path: |
+            out/integrated/*-tests.txt
+            out/integrated/profile-report.json
+          if-no-files-found: error
       - name: Stage verified game package as private draft
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_candidate }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "integrated-${GITHUB_SHA:0:12}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title 'FanProMAX 内置 i3.1 · 人物加速与飞车试验' --notes '15PM / iOS17.0 / TrollStore；原游戏0.9.98(804)。补直接控制载具的驾驶位识别，验证本地归属、世界、车辆及物理组件代数和所有者；新增最终速度上限、本地速度及最近90个完整位移窗口，避免导出前停步覆盖行走记录。加速无体感变化仍在排查，不将字段倍数当作实际倍速。人物速度字段1–3倍、载具重力/垂直速度控制，默认关闭。真实净速度、网络回拉、飞车效果及游戏启动待手机确认。无敌与减伤尚未实现；不含自瞄与压枪。外置显示App仍单独保留。本包没有移入旧自瞄、压枪或警告补丁。' out/integrated/*
+          gh release create "integrated-${GITHUB_SHA:0:12}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title 'FanProMAX 内置 i3.2 · 诊断核查候选' --notes 'i3.2补即时速度回读、游戏重力冲突检查及历史窗口末尾的限速观测。实际三倍速度、稳定飞车与回拉问题仍未解决；人物飞天、无敌与减伤未实现，不含自瞄与压枪。仅在显式选择发布时生成手机候选包。' out/integrated/*
   ui:
     runs-on: macos-15-intel
     timeout-minutes: 25
@@ -68,6 +86,7 @@ jobs:
           path: out/integrated-ui/
           if-no-files-found: error
   publish:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_candidate }}
     needs: [build, ui]
     runs-on: macos-15-intel
     timeout-minutes: 10

@@ -100,7 +100,7 @@ static const char *resultName(fanpro::FieldResult result) {
 static bool failed(fanpro::FieldResult result){return result!=fanpro::FieldResult::off && result!=fanpro::FieldResult::applied && result!=fanpro::FieldResult::unchanged;}
 static void record(NSString *phase) {
     if(!folder)return;
-    NSDictionary *value=@{@"version":@"integrated-i3.1",@"phase":phase,@"time":@(NSDate.date.timeIntervalSince1970),
+    NSDictionary *value=@{@"version":@"integrated-i3.2-review",@"phase":phase,@"time":@(NSDate.date.timeIntervalSince1970),
         @"context":contextDiagnostics?:@{},@"last_motion_window":lastMotionWindow?:@{},@"motion_windows":motionWindows?:@[],@"cleanup_outcome":cleanupOutcome,
         @"last_speed_write_time":@(lastSpeedWriteTime),@"local_verified_frames":@(localVerifiedFrames),
         @"character_ready_frames":@(characterReadyFrames),@"eligible_speed_frames":@(eligibleSpeedFrames),
@@ -155,9 +155,6 @@ static void perform(uint64_t revision) {
         @"character_generations_valid":@(target.generationsValid),@"alive_readable":@(aliveReadable),
         @"character_alive":@(aliveReadable && !(dead&1)),@"movement_mode":@(observation.movementMode),
         @"speed_eligible":@(wanted)} mutableCopy];
-    float field{};
-    if(valid && memory.get(target.movement+0x6dc,field) && std::isfinite(field))details[@"walking_speed_field"]=@(field);
-    if(valid && memory.get(target.movement+0x420,field) && std::isfinite(field))details[@"crouching_speed_field"]=@(field);
     contextDiagnostics=details;
     if(!wanted) {
         if(owner.verified) {
@@ -180,6 +177,21 @@ static void perform(uint64_t revision) {
         lastOutcome=[NSString stringWithFormat:@"%s / %s",resultName(a),resultName(b)];
         if(failed(a) || failed(b)) {lastFailure=[@"speed: " stringByAppendingString:lastOutcome];lastFailureTime=NSDate.date.timeIntervalSince1970;speedRequested.store(false);restoringFields=true;walkLease.restore(fieldAccess);crouchLease.restore(fieldAccess);record(@"speed_failure");}
     }
+    // Keep the same end-of-window observation with historical motion, including after entering a vehicle.
+    if(valid) {
+        float field{};
+        if(memory.get(target.movement+0x6dc,field) && std::isfinite(field))details[@"walking_speed_field"]=@(field);
+        if(memory.get(target.movement+0x420,field) && std::isfinite(field))details[@"crouching_speed_field"]=@(field);
+        if(memory.get(target.pawn+0xbf0,field) && std::isfinite(field))details[@"character_speed_base_candidate_cm_s"]=@(field);
+        if(memory.get(target.pawn+0xbf8,field) && std::isfinite(field))details[@"character_speed_cap_candidate_cm_s"]=@(field);
+        if(memory.get(target.movement+0x17e8,field) && std::isfinite(field))details[@"movement_override_speed_candidate_cm_s"]=@(field);
+        uint64_t table=memory.pointer(target.movement),getter=table ? memory.pointer(table+0x480) : 0;
+        details[@"native_speed_getter_available"]=@(table==memory.base+0x7127e10 && getter==memory.base+0x1c6cc90);
+        if([details[@"native_speed_getter_available"] boolValue]) {
+            float value=reinterpret_cast<float (*)(void *)>(getter)(reinterpret_cast<void *>(target.movement));
+            if(std::isfinite(value) && value>=0 && value<=10000)details[@"native_max_speed_cm_s"]=@(value);
+        }
+    }
     // Read actual local velocity and displacement; never export world coordinates.
     details[@"motion_available"]=@NO;
     if(valid && observation.rootIsCapsule) {
@@ -193,17 +205,13 @@ static void perform(uint64_t revision) {
             if(measured.valid) {lastMotionWindow=@{@"time":@(NSDate.date.timeIntervalSince1970),@"seconds":@(measured.seconds),
                 @"net_meters":@(measured.netMeters),@"path_meters":@(measured.pathMeters),@"net_mps":@(measured.netMPS),
                 @"path_mps":@(measured.pathMPS),@"samples":@(measured.samples),@"selected_multiplier":@(measured.tenths/10.0),
+                @"end_sample_context":[details copy],
                 @"scope":@"local root displacement; straight-line comparison required; no server acceptance inferred"};
                 if(!motionWindows)motionWindows=[NSMutableArray array];
                 [motionWindows addObject:lastMotionWindow];if(motionWindows.count>90)[motionWindows removeObjectAtIndex:0];
             }
         } else motionWindow.reset();
-        uint64_t table=memory.pointer(target.movement),getter=table ? memory.pointer(table+0x480) : 0;
-        details[@"native_speed_getter_available"]=@(table==memory.base+0x7127e10 && getter==memory.base+0x1c6cc90);
-        if([details[@"native_speed_getter_available"] boolValue]) {
-            float value=reinterpret_cast<float (*)(void *)>(getter)(reinterpret_cast<void *>(target.movement));
-            if(std::isfinite(value) && value>=0 && value<=10000)details[@"native_max_speed_cm_s"]=@(value);
-        }
+
     } else motionWindow.reset();
     fanpro::Identity vehicleRoot;CollisionContext carrier;
     bool flightWanted=flightRequested.load() && revision==requestRevision.load() && owner.verified;
@@ -211,9 +219,12 @@ static void perform(uint64_t revision) {
     const auto vehicle=fanpro::readVehicleTarget(memory,owner);vehicleRoot=vehicle.body;
     details[@"flight_target_ready"]=@(vehicle.ready);details[@"flight_target_reason"]=@(vehicle.reason);details[@"flight_target_route"]=@(vehicle.route);
     details[@"flight_carrier_ready"]=@(carrierReady);
+    details[@"flight_velocity_readback_confirmed"]=@NO;
+    details[@"flight_readback_scope"]=@"immediate local physics velocity only; no sustained flight or server acceptance inferred";
     if(flightWanted && vehicle.ready) {
         if(!flightLease.active())record(@"flight_first_call_begin");
         auto result=flightLease.apply(physics,vehicleRoot,flightDirection.load());flightOutcome=@(resultName(result));
+        details[@"flight_velocity_readback_confirmed"]=@(result==fanpro::FieldResult::applied);
         if(failed(result)){lastFailure=[@"flight: " stringByAppendingString:flightOutcome];lastFailureTime=NSDate.date.timeIntervalSince1970;flightRequested.store(false);flightLease.restore(physics);record(@"flight_failure");}
     } else {
         if(owner.verified) {
@@ -255,7 +266,7 @@ static void perform(uint64_t revision) {
         self.card=[UIScrollView new];self.card.backgroundColor=[UIColor colorWithWhite:0.06 alpha:0.95];self.card.layer.cornerRadius=16;self.card.hidden=YES;
         [self.card addSubview:self.content];[self addSubview:self.card];[self bringSubviewToFront:self.launcher];
         UILabel *(^label)(NSString *)=^UILabel *(NSString *text){UILabel *l=[UILabel new];l.text=text;l.textColor=UIColor.whiteColor;l.numberOfLines=0;l.font=[UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];l.adjustsFontForContentSizeCategory=YES;return l;};
-        [self.content addArrangedSubview:label(@"FanProMAX · 内置试验 i3.1")];
+        [self.content addArrangedSubview:label(@"FanProMAX · 内置核查 i3.2")];
         UIStackView *row=[UIStackView new];row.axis=UILayoutConstraintAxisHorizontal;row.distribution=UIStackViewDistributionEqualSpacing;
         [row addArrangedSubview:label(@"人物加速（待实测）")];self.speed=[UISwitch new];self.speed.enabled=ready;
         [self.speed addTarget:self action:@selector(speedChanged:) forControlEvents:UIControlEventValueChanged];[row addArrangedSubview:self.speed];

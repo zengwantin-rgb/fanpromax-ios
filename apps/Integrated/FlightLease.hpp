@@ -35,12 +35,25 @@ public:
             held=true;
             if(!io.gravity(io.context,key,value) || value)return FieldResult::readbackFailed;
         }
+        bool currentGravity{};
+        if(!io.live(io.context,key))return FieldResult::stale;
+        if(!io.gravity(io.context,key,currentGravity))return FieldResult::readFailed;
+        if(currentGravity)return FieldResult::conflict;
         Velocity velocity{};
         if(!io.velocity(io.context,key,velocity))return FieldResult::readFailed;
         if(!std::isfinite(velocity.x) || !std::isfinite(velocity.y) || !std::isfinite(velocity.z) ||
             std::abs(velocity.x)>30000 || std::abs(velocity.y)>30000 || std::abs(velocity.z)>30000)return FieldResult::invalid;
         velocity.z=direction*300.0f;
+        if(!io.live(io.context,key))return FieldResult::stale;
         if(!io.setVelocity(io.context,key,velocity))return FieldResult::writeFailed;
+        if(!io.live(io.context,key))return FieldResult::stale;
+        Velocity actual{};
+        if(!io.velocity(io.context,key,actual))return FieldResult::readbackFailed;
+        auto matches=[](float requested,float observed) {
+            return std::isfinite(observed) && std::abs(requested-observed)<=0.5f+std::abs(requested)*0.0001f;
+        };
+        if(!matches(velocity.x,actual.x) || !matches(velocity.y,actual.y) || !matches(velocity.z,actual.z))return FieldResult::readbackFailed;
+        // Immediate local physics readback only; this does not establish sustained motion.
         return FieldResult::applied;
     }
 };
