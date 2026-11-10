@@ -1,4 +1,5 @@
 """Run only on GitHub-hosted macOS; all data and tokens below are synthetic."""
+import http.client
 import importlib.util
 import json
 import os
@@ -86,7 +87,17 @@ class ReceiverTests(unittest.TestCase):
         doc['snapshot']['motion_windows'] = [{}]*91
         with self.assertRaises(ValueError):
             r.decode_body(json.dumps(doc).encode(), False)
-        self.assertEqual(self.request('/v1/diagnostics', {'padding': 'x'*r.MAX_BODY})[0], 413)
+        # Oversized uploads must be rejected from headers, before reading any body.
+        connection = http.client.HTTPConnection('127.0.0.1', self.server.server_port, timeout=3)
+        connection.putrequest('POST', '/v1/diagnostics')
+        connection.putheader('Authorization', 'Bearer '+'a'*64)
+        connection.putheader('Content-Type', 'application/json')
+        connection.putheader('Content-Length', str(r.MAX_BODY+1))
+        connection.endheaders()
+        response = connection.getresponse()
+        self.assertEqual(response.status, 413)
+        response.read()
+        connection.close()
 
     def test_duplicate_and_storage_retention(self):
         doc = self.body()
