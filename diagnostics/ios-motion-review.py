@@ -19,16 +19,18 @@ for _ in range(struct.unpack_from('<I',data,16)[0]):
    if delta==0:break
    rva+=delta;starts.append(rva);delta=0;shift=0
  cursor+=length
-assert starts
+starts=sorted(set(starts))
 md=Cs(CS_ARCH_ARM64,CS_MODE_ARM);out=Path('out/ios-motion-review');out.mkdir(parents=True)
 roots=[0x22c28b8,0x2300a78,0x2300480,0x1c6cc90,0x505566c];functions=[]
 for rva in roots:
- index=bisect.bisect_left(starts,rva);assert starts[index]==rva,hex(rva)
- size=starts[index+1]-rva;assert size<=100000,(hex(rva),size)
+ index=bisect.bisect_left(starts,rva)
+ exact=index+1<len(starts) and starts[index]==rva
+ size=starts[index+1]-rva if exact else {0x22c28b8:0x2800,0x2300a78:20,0x2300480:0x500,0x1c6cc90:0x800,0x505566c:0x300}[rva]
+ assert size<=100000,(hex(rva),size)
  segment=next(s for s in segments if s['vmaddr']<=base+rva and base+rva+size<=s['vmaddr']+s['size'])
  offset=segment['offset']+base+rva-segment['vmaddr']
  instructions=list(md.disasm(data[offset:offset+size],base+rva))
  name=hex(rva)[2:]+'.asm'
  (out/name).write_text('\n'.join(hex(i.address-base)+': '+i.mnemonic+' '+i.op_str for i in instructions)+'\n')
- functions.append({'rva':hex(rva),'bytes':size,'file':name,'sha256':hashlib.sha256(data[offset:offset+size]).hexdigest()})
+ functions.append({'rva':hex(rva),'bytes':size,'extent_kind':'function_starts' if exact else 'bounded_context_not_proven_function_extent','file':name,'sha256':hashlib.sha256(data[offset:offset+size]).hexdigest()})
 (out/'ios-report.json').write_text(json.dumps({'functions':functions,'input_executed':False,'runtime_cap_value_known':False,'server_behavior_verified':False},indent=2)+'\n')
