@@ -76,17 +76,22 @@ for sec in sections:
     if effective in relocations:regs[parts[0]]=relocations[effective]
    name=labels.get(effective,'') if effective is not None else ''
    target_name=labels.get(regs.get(parts[0]),'')
-   if any(word in name+target_name for word in ('飞车','飞天')):
+   if any(word in name+target_name for word in ('飞车','飞天')) or effective == 0x1049360 + 0x754:
     index=bisect.bisect_right(starts,at)-1;begin=starts[index] if index>=0 else at&~0xff
     extent=bounds.get(begin,0x800)
     if begin<=at<begin+extent and extent<=150000:
      symbols.setdefault(begin,{'name':'stripped_motion_context_'+hex(begin),'address':begin,'size':extent})
-     flag_users.append({'pc':hex(at),'global':name or target_name,'function_rva':hex(begin),'bytes':extent})
+     flag_users.append({'pc':hex(at),'global':name or target_name or 'drawing_speed_toggle_754','function_rva':hex(begin),'bytes':extent})
   elif mnemonic=='bl':
    for reg in ['x'+str(i) for i in range(19)]:regs.pop(reg,None)
   elif parts and mnemonic not in ('cmp','tst','tbz','tbnz','cbz','cbnz','ret','stp','str','strb','stur'):
    regs.pop(parts[0],None)
 roots=[s for s in symbols.values() if any(x in s['name'] for x in ('更新对象数据','更新地址数据','绘制悬浮窗','_ZN6绘制C2','callWrite','writeRemoteMemory','运行绘制'))]
+# Narrow callees from the recovered flight worker; retain unwind-defined bounds.
+for address in (0xe3f094,0xe3f008,0xe3eef4,0xa32a28,0xa304a0):
+ if address in bounds:
+  symbols.setdefault(address,{'name':'motion_dependency_'+hex(address),'address':address,'size':bounds[address]})
+  roots.append(symbols[address])
 queue=[(s['address'],0) for s in roots]+[(int(v['function_rva'],16),0) for v in flag_users];seen=set();references=[];calls=[];summaries=[]
 def add(value,delta):return (value[0],value[1]+delta) if isinstance(value,tuple) else value+delta
 for address,depth in queue:
@@ -120,6 +125,8 @@ for address,depth in queue:
    if ins.mnemonic=='bl':
     args={reg:str(regs[reg]) for reg in ('x0','x1','x2','x3') if reg in regs}
     calls.append({'caller':sym['name'],'pc':hex(ins.address),'target':hex(target),'name':name,'linear_argument_candidates':args})
+    if depth<1 and target in bounds and bounds[target]<=1800:
+     symbols.setdefault(target,{'name':'bounded_callee_'+hex(target),'address':target,'size':bounds[target]})
     if depth<1 and target in symbols and symbols[target]['size']<=1800 and not re.search(r'aim|自瞄|recoil|auth|license|hmac|ssl|http|RSA|AES|EVP|ImGui|_ZNSt',name,re.I):queue.append((target,depth+1))
     for register in ['x'+str(i) for i in range(19)]:regs.pop(register,None)
   elif parts and ins.mnemonic not in ('cmp','tst','tbz','tbnz','cbz','cbnz','ret','stp','stur'):
