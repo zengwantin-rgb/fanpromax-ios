@@ -44,8 +44,50 @@ def describe(address):
  if len(s)>96 or not feature.search(s) or re.search(r'https?://|[A-Za-z0-9+/=_-]{28,}',s):return ''
  return s if all(c.isprintable() for c in s) else ''
 md=Cs(CS_ARCH_ARM64,CS_MODE_ARM)
-roots=[s for s in symbols.values() if any(x in s['name'] for x in ('更新对象数据','更新地址数据','绘制悬浮窗','_ZN6绘制C2','callWrite','writeRemoteMemory'))]
-queue=[(s['address'],0) for s in roots];seen=set();references=[];calls=[];summaries=[]
+# Recover stripped function bounds from unwind records before selecting flag users.
+bounds={at:int(sym['size']) for at,sym in symbols.items()}
+try:
+ for entry in elf.get_dwarf_info().EH_CFI_entries():
+  if 'initial_location' in entry.header and entry.header.get('address_range',0):
+   bounds[int(entry.header['initial_location'])]=int(entry.header['address_range'])
+except Exception:
+ pass
+import bisect
+starts=sorted(bounds);flag_users=[]
+for sec in sections:
+ if not sec['sh_flags']&4:continue
+ regs={}
+ for at,size,mnemonic,operands in md.disasm_lite(sec.data(),int(sec['sh_addr'])):
+  if at in bounds:regs={}
+  parts=operands.split(', ');effective=None
+  if mnemonic in ('adrp','adr') and len(parts)==2 and parts[1].startswith('#'):
+   regs[parts[0]]=int(parts[1][1:],0)
+  elif mnemonic=='add' and len(parts)==3 and parts[1] in regs and parts[2].startswith('#'):
+   try:regs[parts[0]]=regs[parts[1]]+int(parts[2][1:],0)
+   except ValueError:regs.pop(parts[0],None)
+  elif mnemonic=='mov' and len(parts)==2:
+   if parts[1] in regs:regs[parts[0]]=regs[parts[1]]
+   else:regs.pop(parts[0],None)
+  elif mnemonic in ('ldr','ldrb','str','strb'):
+   match=re.search(r'\[(x\d+)(?:, #((?:0x)?[0-9a-f]+))?\]',operands)
+   if match and match[1] in regs:effective=regs[match[1]]+int(match[2] or '0',0)
+   if mnemonic.startswith('ldr'):
+    regs.pop(parts[0],None)
+    if effective in relocations:regs[parts[0]]=relocations[effective]
+   name=labels.get(effective,'') if effective is not None else ''
+   target_name=labels.get(regs.get(parts[0]),'')
+   if any(word in name+target_name for word in ('飞车','飞天')):
+    index=bisect.bisect_right(starts,at)-1;begin=starts[index] if index>=0 else at&~0xff
+    extent=bounds.get(begin,0x800)
+    if begin<=at<begin+extent and extent<=150000:
+     symbols.setdefault(begin,{'name':'stripped_motion_context_'+hex(begin),'address':begin,'size':extent})
+     flag_users.append({'pc':hex(at),'global':name or target_name,'function_rva':hex(begin),'bytes':extent})
+  elif mnemonic=='bl':
+   for reg in ['x'+str(i) for i in range(19)]:regs.pop(reg,None)
+  elif parts and mnemonic not in ('cmp','tst','tbz','tbnz','cbz','cbnz','ret','stp','str','strb','stur'):
+   regs.pop(parts[0],None)
+roots=[s for s in symbols.values() if any(x in s['name'] for x in ('更新对象数据','更新地址数据','绘制悬浮窗','_ZN6绘制C2','callWrite','writeRemoteMemory','运行绘制'))]
+queue=[(s['address'],0) for s in roots]+[(int(v['function_rva'],16),0) for v in flag_users];seen=set();references=[];calls=[];summaries=[]
 def add(value,delta):return (value[0],value[1]+delta) if isinstance(value,tuple) else value+delta
 for address,depth in queue:
  if address in seen or len(seen)>=70:continue
@@ -91,6 +133,7 @@ for address,depth in queue:
  filename=hex(address)[2:]+'.asm';(out/filename).write_text('\n'.join(lines)+'\n')
  summaries.append({**sym,'address':hex(address),'file':filename,'instructions':len(instructions),'depth':depth})
 report={'apk_sha256':hashlib.sha256(raw).hexdigest(),'payload_sha256':hashlib.sha256(data).hexdigest(),
+ 'flag_users':flag_users,'unwind_function_bounds':len(bounds),
  'input_executed':False,'network_calls_by_input':False,'functions':summaries,'feature_references':references,
  'direct_calls':calls,'limits':['Full disassembly of selected movement worker and UI roots, with at most one level of bounded direct callees.',
  'Linear register annotations are candidates, not proven control-flow dataflow or runtime addresses.',
