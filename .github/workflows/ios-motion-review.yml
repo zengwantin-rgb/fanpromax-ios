@@ -1,0 +1,33 @@
+name: Offline iOS speed policy review
+on:
+  push:
+    branches: [analysis/integrated-controls]
+    paths: [diagnostics/ios-motion-review.py, .github/workflows/ios-motion-review.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: macos-15-intel
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Inspect pinned original on hosted macOS
+        env:
+          GH_TOKEN: ${{ secrets.SOURCE_INPUT_TOKEN }}
+        run: |
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          mkdir -p input build
+          trap 'rm -rf input' EXIT
+          gh release download input-newstate-0.9.98-804 --repo zwthys-cyber/newstate-ios-port --pattern NEW_STATE_Decrypted.ipa --dir input
+          python3 -m venv build/review-venv
+          build/review-venv/bin/python -m pip install --only-binary=:all: capstone==5.0.6
+          build/review-venv/bin/python diagnostics/ios-motion-review.py input/NEW_STATE_Decrypted.ipa
+      - name: Publish derived text only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "ios-motion-review-${GITHUB_SHA:0:12}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title 'iOS 最终速度策略离线复核' --notes '仅原始客户端静态分析文本，无新安装包。不能据此证明实际速度或服务器行为。' out/ios-motion-review/*

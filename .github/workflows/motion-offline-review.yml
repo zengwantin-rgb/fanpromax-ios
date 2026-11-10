@@ -1,0 +1,41 @@
+name: Offline review of APK movement and flight implementation
+on:
+  push:
+    branches: [analysis/integrated-controls]
+    paths: [diagnostics/apk-motion-review.py, .github/workflows/motion-offline-review.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: macos-15-intel
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Retrieve encrypted input on hosted macOS only
+        env:
+          GH_TOKEN: ${{ secrets.SOURCE_INPUT_TOKEN }}
+          APK_REVIEW_KEY: ${{ secrets.FANPROMAX_MOTION_KEY }}
+        run: |
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          mkdir -p input build
+          trap 'rm -rf input' EXIT
+          gh release download input-fanpromax-motion-20261110 --repo zwthys-cyber/newstate-ios-port --pattern fanpromax-motion-review.apk.enc --dir input
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p=Path('input/decode-key');p.write_text(os.environ['APK_REVIEW_KEY']);p.chmod(0o600)
+          PY
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in input/fanpromax-motion-review.apk.enc -out input/FanProMAX.apk -pass file:input/decode-key
+          rm input/decode-key
+          python3 -m venv build/motion-review-venv
+          build/motion-review-venv/bin/python -m pip install --only-binary=:all: capstone==5.0.6 pyelftools==0.31 cryptography==44.0.3
+          build/motion-review-venv/bin/python diagnostics/apk-motion-review.py input/FanProMAX.apk
+      - name: Deliver derived static text only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "motion-review-${GITHUB_SHA:0:12}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title 'APK 加速与飞行离线实现复核' --notes '只复核原APK的移动/飞行工作函数、UI引用和直接调用；不执行APK，不请求授权服务，不包含原始二进制或设备日志。不发布新手机测试包，不代表已解决iOS回拉或实际3倍速度。' out/motion-review/*

@@ -1,0 +1,33 @@
+name: Inspect integrated movement vehicle and damage controls
+on:
+  push:
+    branches: [analysis/integrated-controls]
+    paths: [analysis_tools/**, .github/workflows/integrated-analysis.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: macos-15-intel
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Inspect pinned input on hosted macOS only
+        env:
+          GH_TOKEN: ${{ secrets.SOURCE_INPUT_TOKEN }}
+        run: |
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          mkdir -p input build
+          trap 'rm -rf input' EXIT
+          gh release download input-newstate-0.9.98-804 --repo zwthys-cyber/newstate-ios-port --pattern NEW_STATE_Decrypted.ipa --dir input
+          python3 -m venv build/integrated-venv
+          build/integrated-venv/bin/python -m pip install --only-binary=:all: capstone==5.0.6
+          build/integrated-venv/bin/python analysis_tools/inspect-integrated.py input/NEW_STATE_Decrypted.ipa
+      - name: Deliver text evidence only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "integrated-survey-${GITHUB_SHA:0:12}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title '内置控制接入分析' --notes '固定iOS输入的静态元数据/指令报告。没有运行游戏，不含原始IPA，不代表加速、飞车、无敌或减伤已实现。自瞄和压枪排除。' out/integrated-survey/report.json out/integrated-contexts.txt
