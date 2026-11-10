@@ -4,7 +4,7 @@ set -euo pipefail
 mkdir -p build/integrated-ui/FanProPreview.app out/integrated-ui
 preview_app="$PWD/build/integrated-ui/FanProPreview.app"
 preview_sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
-xcrun clang++ -target "$(uname -m)-apple-ios17.0-simulator" -isysroot "$preview_sdk" -std=c++17 -O1 -Wall -Wextra -Werror -fobjc-arc -fblocks -DFANPRO_UI_PREVIEW=1 -Isrc -Iapps/Integrated src/PortCore.cpp apps/Integrated/CollisionProbe.cpp apps/Integrated/Runtime.mm -framework UIKit -framework Foundation -framework CoreGraphics -o "$preview_app/FanProPreview"
+xcrun clang++ -target "$(uname -m)-apple-ios17.0-simulator" -isysroot "$preview_sdk" -std=c++17 -O1 -Wall -Wextra -Werror -fobjc-arc -fblocks -DFANPRO_UI_PREVIEW=1 -Isrc -Iapps/Integrated src/PortCore.cpp apps/Integrated/CollisionProbe.cpp apps/Integrated/Runtime.mm apps/Integrated/DiagnosticUpload.mm -framework UIKit -framework Foundation -framework Security -framework CoreGraphics -o "$preview_app/FanProPreview"
 python3 - "$preview_app/Info.plist" <<'PY'
 import plistlib,sys
 from pathlib import Path

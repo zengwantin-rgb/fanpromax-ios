@@ -8,7 +8,7 @@ on:
         default: false
   push:
     branches: [analysis/integrated-controls]
-    paths: [apps/Integrated/**, tests/integrated_*.cpp, scripts/*integrated*, .github/workflows/integrated-build.yml]
+    paths: [apps/Integrated/**, tests/integrated_*.cpp, tests/diagnostic_*, diagnostics/receiver.py, scripts/*integrated*, .github/workflows/integrated-build.yml]
 permissions:
   contents: read
 jobs:
@@ -30,6 +30,11 @@ jobs:
             xcrun clang++ -std=c++17 -Wall -Wextra -Werror -UNDEBUG -fsanitize=address,undefined -Iapps/Integrated "tests/integrated_${test_name}_tests.cpp" -o "build/integrated-${test_name}-tests"
             "build/integrated-${test_name}-tests" | tee "out/integrated/${test_name}-tests.txt"
           done
+      - name: Test diagnostic receiver and authenticated uploader on hosted macOS
+        run: |
+          python3 tests/diagnostic_receiver_tests.py
+          xcrun clang++ -std=c++17 -Wall -Wextra -Werror -fobjc-arc -fblocks -Iapps/Integrated apps/Integrated/DiagnosticUpload.mm tests/diagnostic_upload_tests.mm -framework Foundation -framework Security -o build/diagnostic-upload-tests
+          build/diagnostic-upload-tests | tee out/integrated/diagnostic-upload-tests.txt
       - name: Test verified local ownership and controller pinning
         run: |
           set -o pipefail
@@ -48,7 +53,7 @@ jobs:
           build/integrated-venv/bin/python scripts/integrated-profile.py input/NEW_STATE_Decrypted.ipa
           build/integrated-venv/bin/python diagnostics/speed-cap-emulation.py input/NEW_STATE_Decrypted.ipa
           module_sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
-          xcrun --sdk iphoneos clang++ -arch arm64 -isysroot "$module_sdk" -miphoneos-version-min=17.0 -std=c++17 -O2 -Wall -Wextra -Werror -fobjc-arc -fblocks -fvisibility=hidden -Isrc -Iapps/Integrated -Ibuild -dynamiclib src/PortCore.cpp apps/Integrated/CollisionProbe.cpp apps/Integrated/Runtime.mm -framework UIKit -framework Foundation -framework CoreGraphics -Wl,-dead_strip -Wl,-install_name,@executable_path/Frameworks/FanProIntegrated.dylib -o out/integrated/FanProIntegrated.dylib
+          xcrun --sdk iphoneos clang++ -arch arm64 -isysroot "$module_sdk" -miphoneos-version-min=17.0 -std=c++17 -O2 -Wall -Wextra -Werror -fobjc-arc -fblocks -fvisibility=hidden -Isrc -Iapps/Integrated -Ibuild -dynamiclib src/PortCore.cpp apps/Integrated/CollisionProbe.cpp apps/Integrated/Runtime.mm apps/Integrated/DiagnosticUpload.mm -framework UIKit -framework Foundation -framework Security -framework CoreGraphics -Wl,-dead_strip -Wl,-install_name,@executable_path/Frameworks/FanProIntegrated.dylib -o out/integrated/FanProIntegrated.dylib
           codesign --force --sign - --timestamp=none --pagesize 4096 out/integrated/FanProIntegrated.dylib
           codesign --verify --strict out/integrated/FanProIntegrated.dylib
       - name: Package explicitly requested candidate
@@ -70,7 +75,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "integrated-${GITHUB_SHA:0:12}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title 'FanProMAX 内置 i4 · 客户端速度策略试验' --notes 'i4同时处理已确认的步行速度字段和角色独立速度上限，并用原生最终速度函数核对同一任务中的修改前后比例。不符合目标比例时恢复。实际三倍速度、稳定飞车与回拉问题仍未解决；人物飞天、无敌与减伤未实现，不含自瞄与压枪。仅在显式选择发布时生成手机候选包。' out/integrated/*
+          gh release create "integrated-${GITHUB_SHA:0:12}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title 'FanProMAX 内置 i5 · 自动诊断回传' --notes 'i5在i4基础上增加可配对的HTTPS诊断回传、启停开关、服务器回执和失败重试。地址及密钥需由用户在手机输入，不包含在此公开包中。每次启动默认关闭，仅游戏前台发送本模块诊断，不含远程命令。移动与飞车策略保持i4，实际三倍和稳定飞车仍未验证；不含自瞄与压枪。' out/integrated/*
   ui:
     runs-on: macos-15-intel
     timeout-minutes: 25

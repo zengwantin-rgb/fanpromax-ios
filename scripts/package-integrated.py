@@ -32,8 +32,8 @@ for path,identity in binaries.items():
  assert loader.dependency_names(path)==dependencies[path]+([loader.LIBRARY] if path==executable else [])
 assert p.resource_digests(root,set(binaries)|{embedded})==original_resources
 assert p.entitlements(app)==app_ent
-ipa=out/'NEW_STATE-FanProMAX-integrated-i4-review.ipa';p.package(root,ipa)
-report={'commit':os.environ['GITHUB_SHA'],'version':'integrated-i4-review','file':ipa.name,'bytes':ipa.stat().st_size,'sha256':p.digest(ipa),
+ipa=out/'NEW_STATE-FanProMAX-integrated-i5-telemetry.ipa';p.package(root,ipa)
+report={'commit':os.environ['GITHUB_SHA'],'version':'integrated-i5-telemetry','file':ipa.name,'bytes':ipa.stat().st_size,'sha256':p.digest(ipa),
  'module_sha256':p.digest(embedded),'module_load_command':patch,'original_text_uuid_encryption_preserved':True,
  'original_resources_preserved':True,'original_entitlements_preserved':True,'signatures_verified':True,'archive_crc_verified':True,
  'aim_included':False,'recoil_included':False,'character_speed_field_experiment':True,'vehicle_flight_experiment':True,

@@ -1,4 +1,5 @@
 #import <UIKit/UIKit.h>
+#import "DiagnosticUpload.h"
 #import <objc/message.h>
 #import <objc/runtime.h>
 #include "CollisionRuntimeRead.hpp"
@@ -114,7 +115,7 @@ static const char *resultName(fanpro::FieldResult result) {
 static bool failed(fanpro::FieldResult result){return result!=fanpro::FieldResult::off && result!=fanpro::FieldResult::applied && result!=fanpro::FieldResult::unchanged;}
 static void record(NSString *phase) {
     if(!folder)return;
-    NSDictionary *value=@{@"version":@"integrated-i4-review",@"phase":phase,@"time":@(NSDate.date.timeIntervalSince1970),
+    NSDictionary *value=@{@"version":@"integrated-i5-telemetry",@"phase":phase,@"time":@(NSDate.date.timeIntervalSince1970),
         @"context":contextDiagnostics?:@{},@"last_motion_window":lastMotionWindow?:@{},@"motion_windows":motionWindows?:@[],@"cleanup_outcome":cleanupOutcome,
         @"last_speed_write_time":@(lastSpeedWriteTime),@"local_verified_frames":@(localVerifiedFrames),
         @"character_ready_frames":@(characterReadyFrames),@"eligible_speed_frames":@(eligibleSpeedFrames),
@@ -129,6 +130,7 @@ static void record(NSString *phase) {
         @"aim_included":@NO,@"recoil_included":@NO};
     NSData *data=[NSJSONSerialization dataWithJSONObject:value options:NSJSONWritingPrettyPrinted error:nil];
     [data writeToFile:[folder stringByAppendingPathComponent:@"integrated-status.json"] atomically:YES];
+    if(data)dispatch_async(dispatch_get_main_queue(),^{[FanProDiagnosticUpload.shared offerSnapshot:data];});
 }
 static bool taskMethod(Class cls,SEL selector,uint64_t rva,const char *types,bool classMethod) {
     Method method=classMethod ? class_getClassMethod(cls,selector) : class_getInstanceMethod(cls,selector);
@@ -297,6 +299,8 @@ static void perform(uint64_t revision) {
 @property(nonatomic,strong) UISwitch *flight;
 @property(nonatomic,strong) UILabel *multiplierLabel;
 @property(nonatomic,strong) UILabel *status;
+@property(nonatomic,strong) UILabel *uploadStatus;
+@property(nonatomic,strong) UISwitch *upload;
 @property(nonatomic,strong) NSTimer *timer;
 @end
 @implementation FanProIntegratedPanel
@@ -313,7 +317,7 @@ static void perform(uint64_t revision) {
         self.card=[UIScrollView new];self.card.backgroundColor=[UIColor colorWithWhite:0.06 alpha:0.95];self.card.layer.cornerRadius=16;self.card.hidden=YES;
         [self.card addSubview:self.content];[self addSubview:self.card];[self bringSubviewToFront:self.launcher];
         UILabel *(^label)(NSString *)=^UILabel *(NSString *text){UILabel *l=[UILabel new];l.text=text;l.textColor=UIColor.whiteColor;l.numberOfLines=0;l.font=[UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];l.adjustsFontForContentSizeCategory=YES;return l;};
-        [self.content addArrangedSubview:label(@"FanProMAX · 内置试验 i4")];
+        [self.content addArrangedSubview:label(@"FanProMAX · 内置诊断 i5")];
         UIStackView *row=[UIStackView new];row.axis=UILayoutConstraintAxisHorizontal;row.distribution=UIStackViewDistributionEqualSpacing;
         [row addArrangedSubview:label(@"人物加速（待实测）")];self.speed=[UISwitch new];self.speed.enabled=ready;
         [self.speed addTarget:self action:@selector(speedChanged:) forControlEvents:UIControlEventValueChanged];[row addArrangedSubview:self.speed];
@@ -330,9 +334,17 @@ static void perform(uint64_t revision) {
         [self.content addArrangedSubview:label(@"无敌与减伤：尚未实现\n自瞄与压枪：不包含")];
         UIButton *share=[UIButton buttonWithType:UIButtonTypeSystem];[share setTitle:@"导出诊断" forState:UIControlStateNormal];
         [share addTarget:self action:@selector(share) forControlEvents:UIControlEventTouchUpInside];[self.content addArrangedSubview:share];
+        UIButton *pair=[UIButton buttonWithType:UIButtonTypeSystem];[pair setTitle:@"连接诊断服务器" forState:UIControlStateNormal];
+        [pair addTarget:self action:@selector(pairDiagnostics) forControlEvents:UIControlEventTouchUpInside];[self.content addArrangedSubview:pair];
+        UIStackView *uploadRow=[UIStackView new];uploadRow.axis=UILayoutConstraintAxisHorizontal;uploadRow.distribution=UIStackViewDistributionEqualSpacing;
+        [uploadRow addArrangedSubview:label(@"自动回传诊断")];self.upload=[UISwitch new];
+        [self.upload addTarget:self action:@selector(uploadChanged:) forControlEvents:UIControlEventValueChanged];[uploadRow addArrangedSubview:self.upload];[self.content addArrangedSubview:uploadRow];
+        self.uploadStatus=label(FanProDiagnosticUpload.shared.status);[self.content addArrangedSubview:self.uploadStatus];
+        [self.content addArrangedSubview:label(@"仅回传本模块诊断；每次打开游戏默认关闭。")];
         __weak FanProIntegratedPanel *weak=self;
         self.timer=[NSTimer scheduledTimerWithTimeInterval:0.1 repeats:YES block:^(NSTimer *timer){(void)timer;[weak tick];}];
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(background) name:UIApplicationWillResignActiveNotification object:nil];
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(foreground) name:UIApplicationDidBecomeActiveNotification object:nil];
     }return self;
 }
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {UIView *hit=[super hitTest:point withEvent:event];return hit==self ? nil : hit;}
@@ -350,8 +362,10 @@ static void perform(uint64_t revision) {
 - (void)flightChanged:(UISwitch *)sender {if(!ready){sender.on=NO;return;}flightRequested.store(sender.on);++requestRevision;}
 - (void)verticalChanged:(UISegmentedControl *)sender {flightDirection.store(int(sender.selectedSegmentIndex)-1);++requestRevision;}
 - (void)multiplierChanged:(UISlider *)sender {unsigned value=unsigned(std::round(sender.value*10));speedTenths.store(value);self.multiplierLabel.text=[NSString stringWithFormat:@"请求倍率 %.1f×",value/10.0];++requestRevision;}
-- (void)background {speedRequested.store(false);flightRequested.store(false);++requestRevision;self.speed.on=NO;self.flight.on=NO;[self tick];}
+- (void)foreground {[FanProDiagnosticUpload.shared setForeground:YES];}
+- (void)background {[FanProDiagnosticUpload.shared setForeground:NO];speedRequested.store(false);flightRequested.store(false);++requestRevision;self.speed.on=NO;self.flight.on=NO;[self tick];}
 - (void)tick {
+    self.upload.on=FanProDiagnosticUpload.shared.enabled;self.uploadStatus.text=FanProDiagnosticUpload.shared.status;
     if(!ready || pendingTask.exchange(true))return;
     Class cls=objc_getClass("FIOSAsyncTask");
     if(!validTaskClass(cls)){pendingTask.store(false);self.status.text=@"游戏任务接口不匹配，未修改";return;}
@@ -362,6 +376,16 @@ static void perform(uint64_t revision) {
         return true;
     };
     reinterpret_cast<void (*)(id,SEL,bool (^)(void))>(objc_msgSend)(cls,sel_registerName("CreateTaskWithBlock:"),block);
+}
+- (void)uploadChanged:(UISwitch *)sender {[FanProDiagnosticUpload.shared setUploading:sender.on];sender.on=FanProDiagnosticUpload.shared.enabled;}
+- (void)pairDiagnostics {
+    UIViewController *controller=self.window.rootViewController;while(controller.presentedViewController)controller=controller.presentedViewController;
+    UIAlertController *alert=[UIAlertController alertControllerWithTitle:@"连接诊断服务器" message:@"粘贴完整配对串。密钥保存在本机钥匙串，不会加入导出日志。" preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field){field.placeholder=@"https://…/v1/diagnostics#密钥";field.secureTextEntry=YES;field.autocapitalizationType=UITextAutocapitalizationTypeNone;field.autocorrectionType=UITextAutocorrectionTypeNo;}];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"解除配对" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action){(void)action;[FanProDiagnosticUpload.shared forgetPairing];}]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){(void)action;[FanProDiagnosticUpload.shared configurePairing:alert.textFields.firstObject.text];}]];
+    [controller presentViewController:alert animated:YES completion:nil];
 }
 - (void)share {
     UIViewController *controller=self.window.rootViewController;while(controller.presentedViewController)controller=controller.presentedViewController;
@@ -409,6 +433,7 @@ __attribute__((constructor)) static void FanProEntry(void){dispatch_async(dispat
         NSMutableArray *failures=[NSMutableArray array];
         void (^check)(BOOL,NSString *)=^(BOOL value,NSString *name){if(!value)[failures addObject:name];};
         [panel layoutIfNeeded];
+        check(!panel.upload.on && !FanProDiagnosticUpload.shared.enabled,@"diagnostic upload defaults off");
         check(!panel.speed.enabled && !panel.flight.enabled && !panel.speed.on && !panel.flight.on,@"unverified profile cannot enable changes");
         panel.speed.on=YES;[panel speedChanged:panel.speed];check(!speedRequested.load() && !panel.speed.on,@"programmatic request cannot bypass profile gating");
         [panel.launcher sendActionsForControlEvents:UIControlEventTouchUpInside];check(panel.card.hidden,@"launcher collapses panel");

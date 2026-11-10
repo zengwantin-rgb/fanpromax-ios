@@ -1,0 +1,27 @@
+[Unit]
+Description=FanProMAX authenticated diagnostic receiver
+After=network.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+StateDirectory=fanpro-diagnostics
+StateDirectoryMode=0700
+LoadCredential=auth.json:/etc/fanpro-diagnostics-auth.json
+ExecStart=/usr/bin/python3 -B /usr/local/lib/fanpro-diagnostics/receiver.py --config %d/auth.json --data /var/lib/fanpro-diagnostics
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_UNIX
+MemoryMax=128M
+TasksMax=32
+
+[Install]
+WantedBy=multi-user.target
