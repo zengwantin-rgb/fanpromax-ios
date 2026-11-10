@@ -21,11 +21,11 @@ for _ in range(struct.unpack_from('<I',data,16)[0]):
  cursor+=length
 starts=sorted(set(starts))
 md=Cs(CS_ARCH_ARM64,CS_MODE_ARM);out=Path('out/ios-motion-review');out.mkdir(parents=True)
-roots=[0x22bc520,0x22c28b8,0x2300a78,0x2300480,0x1c6cc90,0x505566c];functions=[]
+roots=[0x54910e0,0x22bc520,0x22c28b8,0x2300a78,0x2300480,0x1c6cc90,0x505566c];functions=[]
 for rva in roots:
  index=bisect.bisect_left(starts,rva)
  exact=index+1<len(starts) and starts[index]==rva
- size=starts[index+1]-rva if exact else {0x22bc520:0x6400,0x22c28b8:4,0x2300a78:20,0x2300480:0x500,0x1c6cc90:0x800,0x505566c:0x300}[rva]
+ size=starts[index+1]-rva if exact else {0x54910e0:0x500,0x22bc520:0x6400,0x22c28b8:4,0x2300a78:20,0x2300480:0x500,0x1c6cc90:0x800,0x505566c:0x300}[rva]
  assert size<=100000,(hex(rva),size)
  segment=next(s for s in segments if s['vmaddr']<=base+rva and base+rva+size<=s['vmaddr']+s['size'])
  offset=segment['offset']+base+rva-segment['vmaddr']
