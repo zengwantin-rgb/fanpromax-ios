@@ -1,10 +1,18 @@
-# FanProMAX 内置 i4 候选
+# FanProMAX 内置 i5 自动诊断回传
 
-目标：iPhone 15 Pro Max、iOS 17.0、TrollStore，原始游戏 0.9.98 (804)。运行时版本为 `integrated-i4-review`。i4 包含客户端限速修复及针对回拉的运动记录；尚不能据此宣称实际对局已保持 1–3 倍速度或稳定飞车。
+目标：iPhone 15 Pro Max、iOS 17.0、TrollStore，原始游戏 0.9.98 (804)。运行时版本为 `integrated-i5-telemetry`。i5 继承 i4 的客户端限速策略与回拉运动记录，增加可配对的 HTTPS 自动诊断回传；尚不能据此宣称实际对局已保持 1–3 倍速度或稳定飞车。
 
 用户的 i3.1 数据显示正常约 6.4 m/s、选定 3 倍时约 8 m/s，车辆能升高但随后被拉回。人物飞天、无敌、减伤未实现；自瞄和压枪继续排除。
 
-## 速度控制变化
+## 自动诊断回传
+
+已发布 [i5 IPA / dylib](https://github.com/zengwantin-rgb/fanpromax-ios/releases/tag/integrated-9ff267a3f750)，编译提交 `9ff267a3f7500debfaf46d8e395cfcff66f12d1b`。安装后在 F 面板点“连接诊断服务器”，粘贴私下提供的配对串，再打开“自动回传诊断”。服务器明确确认报告后才显示“服务器已接收”。每次启动默认关闭，配对保存在钥匙串，后台暂停。公开包不含服务地址或密钥。
+
+用户授权的接收服务已部署在项目服务器。公网没有读取日志接口，报告保存在服务器私有目录，助手可以在会话中读取。传输内容仅为模块已有诊断，无账号凭据、绝对世界坐标或任意远程命令。当前为临时 HTTPS 隧道，重建隧道后需重新配对；详细范围见 [自动回传说明](../../diagnostics/README-telemetry.zh-CN.md)。
+
+[构建与交付检查 42735543953](https://github.com/zengwantin-rgb/fanpromax-ios/actions/runs/42735543953)、[公网接收检查 42735689751](https://github.com/zengwantin-rgb/fanpromax-ios/actions/runs/42735689751) 均通过。后者使用独立密钥和合成数据，不写入手机记录。发布时尚未收到手机报告，不能称为真机已连接。
+
+## 速度控制变化（继承 i4）
 
 旧实现只缩放 movement+0x6dc 和 +0x420。原始客户端的一个步行速度分支还会用 character+0xbf8 取上限，旧实现遗漏了这层限制。
 
@@ -26,9 +34,9 @@ i4 在同一游戏任务中恢复上一轮仍归本模块持有的字段，读�
 
 普通推送不自动发布。交付通过已注册的 workflow_dispatch，选择 `analysis/integrated-controls` 分支及 `publish_candidate=true`，在构建和界面检查通过后验证包摘要再发布。
 
-本轮交付检查：https://github.com/zengwantin-rgb/fanpromax-ios/actions/runs/42732886395
+i4 历史交付检查：https://github.com/zengwantin-rgb/fanpromax-ios/actions/runs/42732886395
 编译提交：`51a35ef8dcac1fdfddc1838df61ac72d0f79cdfe`。
 
-后续需要 i4 的一次 `integrated-status.json`，回答两个旧日志无法回答的问题：原生最终速度是否真的达到所选倍率；车辆回落时是连续下落还是位置突变。已有 i3.1 数据不能替代这两项新观测。完整证据见 [motion-offline-review.md](../../analysis/motion-offline-review.md)。
+i5 配对开启后可以自动回传诊断，继续回答两个旧日志无法回答的问题：原生最终速度是否真的达到所选倍率；车辆回落时是连续下落还是位置突变。已有 i3.1 数据不能替代这两项新观测。完整证据见 [motion-offline-review.md](../../analysis/motion-offline-review.md)。
 
-已发布候选：[integrated-51a35ef8dcac](https://github.com/zengwantin-rgb/fanpromax-ios/releases/tag/integrated-51a35ef8dcac)，包含完整 IPA 和替换用 FanProIntegrated.dylib。上述云端交付检查已全部通过，设备效果仍未验证。
+i4 历史候选：[integrated-51a35ef8dcac](https://github.com/zengwantin-rgb/fanpromax-ios/releases/tag/integrated-51a35ef8dcac)，包含完整 IPA 和替换用 FanProIntegrated.dylib。上述云端交付检查已全部通过，设备效果仍未验证。
