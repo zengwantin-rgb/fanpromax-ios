@@ -50,6 +50,7 @@ class ReceiverTests(unittest.TestCase):
 
     def test_authenticated_store_and_no_read_api(self):
         doc = self.body()
+        doc['snapshot']['speed_failure_history'] = [{'time': 1, 'original_native_cm_s': 640, 'requested_native_cm_s': 1920, 'result_native_cm_s': 640, 'native_samples': [{'native_curve_cap_cm_s': 640}]}]
         code, ack = self.request('/v1/diagnostics', doc)
         self.assertEqual(code, 201)
         self.assertEqual(ack['report_id'], doc['report_id'])

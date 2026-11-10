@@ -40,3 +40,9 @@ i4 历史交付检查：https://github.com/zengwantin-rgb/fanpromax-ios/actions/
 i5 配对开启后可以自动回传诊断，继续回答两个旧日志无法回答的问题：原生最终速度是否真的达到所选倍率；车辆回落时是连续下落还是位置突变。已有 i3.1 数据不能替代这两项新观测。完整证据见 [motion-offline-review.md](../../analysis/motion-offline-review.md)。
 
 i4 历史候选：[integrated-51a35ef8dcac](https://github.com/zengwantin-rgb/fanpromax-ios/releases/tag/integrated-51a35ef8dcac)，包含完整 IPA 和替换用 FanProIntegrated.dylib。上述云端交付检查已全部通过，设备效果仍未验证。
+
+## i5.1 源码诊断改进（未发布）
+
+本次已收到真机 i5 自动回传，连接链路已证实；用户随后确认停止游戏，实时监看结束。加速出现原生倍率校验失败，但失败前后的限速值会被下一帧覆盖。i5.1 源码保留最近 16 次失败的不可变记录，包括同一游戏任务里的原生前后读数、请求倍率、清理结果及最终曲线限速观测。曲线 getter 增加原始指令特征校验，只有已验证角色与组件才能调用。普通帧与后续字段恢复不会清掉失败记录。接收端格式保持兼容 i5。
+
+这是诊断留存修正，不是实际速度或飞车修复；不会自动更换用户正在使用的 i5。此轮只做源码和托管检查，不发布新的手机候选包，不要求用户重开游戏。

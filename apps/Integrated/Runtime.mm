@@ -32,6 +32,7 @@ std::atomic<unsigned> speedTenths{10};
 std::atomic<bool> pendingTask{false};
 std::atomic<uint64_t> requestRevision{0};
 fanpro::SpeedPolicyLease speedPolicy;
+NSMutableArray *nativeSpeedSamples,*speedFailureHistory;
 uint64_t currentWorld{};
 NSString *lastOutcome=@"尚未修改";
 NSString *profileError;
@@ -64,6 +65,27 @@ static bool nativeSpeed(void *,const fanpro::Identity &movement,const fanpro::Id
     uint64_t table=memory.pointer(movement.object),getter=table ? memory.pointer(table+0x480) : 0;
     if(table!=memory.base+0x7127e10 || getter!=memory.base+0x1c6cc90)return false;
     value=reinterpret_cast<float (*)(void *)>(getter)(reinterpret_cast<void *>(movement.object));
+    if(nativeSpeedSamples && nativeSpeedSamples.count<2) {
+        NSMutableDictionary *sample=[NSMutableDictionary dictionary];
+        if(std::isfinite(value))sample[@"final_native_cm_s"]=@(value);
+        struct Field {const char *name;uint64_t address;};
+        for(const auto &field:{Field{"walking_cm_s",movement.object+0x6dc},Field{"crouching_cm_s",movement.object+0x420},
+            Field{"character_base_candidate_cm_s",character.object+0xbf0},Field{"character_cap_cm_s",character.object+0xbf8},
+            Field{"character_policy_factor",character.object+0x86c},Field{"movement_factor_numerator",movement.object+0xc48},
+            Field{"movement_factor_denominator",movement.object+0x17fc},Field{"movement_factor_floor",movement.object+0x168c}}) {
+            float observed{};if(memory.get(field.address,observed) && std::isfinite(observed))sample[@(field.name)]=@(observed);
+        }
+        uint8_t flags{},state{};
+        if(memory.get(movement.object+0x1548,state))sample[@"movement_policy_state"]=@(state);
+        if(memory.get(movement.object+0x310,flags)) {
+            sample[@"final_curve_limit_enabled"]=@((flags&1)!=0);
+            if(flags&1) {
+                float curve=reinterpret_cast<float (*)(void *)>(memory.base+0x2300480)(reinterpret_cast<void *>(character.object));
+                if(std::isfinite(curve) && curve>=0 && curve<=10000)sample[@"native_curve_cap_cm_s"]=@(curve);
+            }
+        }
+        [nativeSpeedSamples addObject:[sample copy]];
+    }
     return std::isfinite(value) && value>=0 && value<=10000;
 }
 static bool identity(uint64_t object,uint64_t world,fanpro::Identity &out) {
@@ -113,11 +135,22 @@ static const char *resultName(fanpro::FieldResult result) {
     return "unknown";
 }
 static bool failed(fanpro::FieldResult result){return result!=fanpro::FieldResult::off && result!=fanpro::FieldResult::applied && result!=fanpro::FieldResult::unchanged;}
+static void rememberSpeedFailure(const fanpro::SpeedPolicyReport &report,float multiplier,NSArray *samples,NSTimeInterval when) {
+    NSMutableArray *frozen=[NSMutableArray array];
+    for(NSDictionary *sample in samples)if(frozen.count<2)[frozen addObject:[sample copy]];
+    NSDictionary *event=@{@"time":@(when),@"selected_multiplier":@(multiplier),@"stage":@(report.stage),
+        @"result":@(resultName(report.result)),@"cleanup":@(resultName(report.cleanup)),
+        @"original_native_cm_s":@(report.originalNative),@"requested_native_cm_s":@(report.expectedNative),
+        @"result_native_cm_s":@(report.actualNative),@"native_samples":[frozen copy],
+        @"scope":@"same-task failure evidence retained after restoration; no server attribution"};
+    if(!speedFailureHistory)speedFailureHistory=[NSMutableArray array];
+    [speedFailureHistory addObject:event];if(speedFailureHistory.count>16)[speedFailureHistory removeObjectAtIndex:0];
+}
 static void record(NSString *phase) {
     if(!folder)return;
-    NSDictionary *value=@{@"version":@"integrated-i5-telemetry",@"phase":phase,@"time":@(NSDate.date.timeIntervalSince1970),
+    NSDictionary *value=@{@"version":@"integrated-i5.1-review",@"phase":phase,@"time":@(NSDate.date.timeIntervalSince1970),
         @"context":contextDiagnostics?:@{},@"last_motion_window":lastMotionWindow?:@{},@"motion_windows":motionWindows?:@[],@"cleanup_outcome":cleanupOutcome,
-        @"last_speed_write_time":@(lastSpeedWriteTime),@"local_verified_frames":@(localVerifiedFrames),
+        @"speed_failure_history":speedFailureHistory?:@[],@"last_speed_write_time":@(lastSpeedWriteTime),@"local_verified_frames":@(localVerifiedFrames),
         @"character_ready_frames":@(characterReadyFrames),@"eligible_speed_frames":@(eligibleSpeedFrames),
         @"profile_ready":@(ready),@"last_failure":lastFailure?:@"",@"last_failure_time":@(lastFailureTime),@"profile_error":profileError?:@"",@"speed_requested":@(speedRequested.load()),
         @"selected_multiplier":@(speedTenths.load()/10.0),@"speed_field_outcome":lastOutcome?:@"",
@@ -186,6 +219,7 @@ static void perform(uint64_t revision) {
         fanpro::Identity key{target.movement,target.items[1],target.world,target.serials[1]};
         float multiplier=speedTenths.load()/10.0f;
         fanpro::Identity actor{target.pawn,target.items[0],target.world,target.serials[0]};
+        nativeSpeedSamples=[NSMutableArray array];
         auto result=speedPolicy.apply(fieldAccess,restoreAccess,key,actor,multiplier,nullptr,nativeSpeed);
         speedWrites+=result.writes;
         if(result.writes)lastSpeedWriteTime=NSDate.date.timeIntervalSince1970;
@@ -197,6 +231,7 @@ static void perform(uint64_t revision) {
         lastOutcome=[NSString stringWithFormat:@"%s: %s",result.stage,resultName(result.result)];
         if(failed(result.result)) {
             lastFailure=[@"speed: " stringByAppendingString:lastOutcome];lastFailureTime=NSDate.date.timeIntervalSince1970;
+            rememberSpeedFailure(result,multiplier,nativeSpeedSamples,lastFailureTime);
             speedRequested.store(false);auto cleanup=speedPolicy.restore(restoreAccess);
             cleanupOutcome=[NSString stringWithFormat:@"speed %s / %s",resultName(result.cleanup),resultName(cleanup)];record(@"speed_failure");
         }
@@ -317,7 +352,7 @@ static void perform(uint64_t revision) {
         self.card=[UIScrollView new];self.card.backgroundColor=[UIColor colorWithWhite:0.06 alpha:0.95];self.card.layer.cornerRadius=16;self.card.hidden=YES;
         [self.card addSubview:self.content];[self addSubview:self.card];[self bringSubviewToFront:self.launcher];
         UILabel *(^label)(NSString *)=^UILabel *(NSString *text){UILabel *l=[UILabel new];l.text=text;l.textColor=UIColor.whiteColor;l.numberOfLines=0;l.font=[UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];l.adjustsFontForContentSizeCategory=YES;return l;};
-        [self.content addArrangedSubview:label(@"FanProMAX · 内置诊断 i5")];
+        [self.content addArrangedSubview:label(@"FanProMAX · 内置诊断 i5.1")];
         UIStackView *row=[UIStackView new];row.axis=UILayoutConstraintAxisHorizontal;row.distribution=UIStackViewDistributionEqualSpacing;
         [row addArrangedSubview:label(@"人物加速（待实测）")];self.speed=[UISwitch new];self.speed.enabled=ready;
         [self.speed addTarget:self action:@selector(speedChanged:) forControlEvents:UIControlEventValueChanged];[row addArrangedSubview:self.speed];
@@ -435,6 +470,18 @@ __attribute__((constructor)) static void FanProEntry(void){dispatch_async(dispat
         NSMutableArray *failures=[NSMutableArray array];
         void (^check)(BOOL,NSString *)=^(BOOL value,NSString *name){if(!value)[failures addObject:name];};
         [panel layoutIfNeeded];
+        fanpro::SpeedPolicyReport failure;failure.stage="native_ratio_not_met";failure.result=fanpro::FieldResult::readbackFailed;
+        failure.originalNative=640;failure.expectedNative=1920;failure.actualNative=640;
+        NSMutableDictionary *sample=[@{@"final_native_cm_s":@640,@"native_curve_cap_cm_s":@640} mutableCopy];
+        rememberSpeedFailure(failure,3,@[sample],1);
+        sample[@"native_curve_cap_cm_s"]=@999;contextDiagnostics=@{};
+        check([speedFailureHistory[0][@"native_samples"][0][@"native_curve_cap_cm_s"] isEqual:@640],@"failure snapshot survives later context changes");
+        for(unsigned i=2;i<=20;++i)rememberSpeedFailure(failure,3,@[sample],i);
+        check(speedFailureHistory.count==16 && [speedFailureHistory[0][@"time"] isEqual:@5],@"failure history retains the latest sixteen events");
+        folder=NSTemporaryDirectory();record(@"preview_failure_retention");
+        NSData *saved=[NSData dataWithContentsOfFile:[folder stringByAppendingPathComponent:@"integrated-status.json"]];
+        NSDictionary *savedReport=[NSJSONSerialization JSONObjectWithData:saved options:0 error:nil];
+        check([savedReport[@"speed_failure_history"] count]==16 && [savedReport[@"speed_failure_history"][15][@"requested_native_cm_s"] isEqual:@1920],@"normal report export retains failure evidence after restoration");
         check(!panel.upload.on && !FanProDiagnosticUpload.shared.enabled,@"diagnostic upload defaults off");
         check(!panel.speed.enabled && !panel.flight.enabled && !panel.speed.on && !panel.flight.on,@"unverified profile cannot enable changes");
         panel.speed.on=YES;[panel speedChanged:panel.speed];check(!speedRequested.load() && !panel.speed.on,@"programmatic request cannot bypass profile gating");
@@ -447,7 +494,7 @@ __attribute__((constructor)) static void FanProEntry(void){dispatch_async(dispat
             check([panel hitTest:CGPointMake(panel.bounds.size.width-2,panel.bounds.size.height-2) withEvent:nil]==nil,@"gameplay area passes through touches");
         }
         panel.frame=self.window.bounds;[panel setNeedsLayout];[panel layoutIfNeeded];
-        NSDictionary *report=@{@"passed":@(failures.count==0),@"failures":failures,@"scope":@"Simulator UIKit profile gating, panel actions, portrait/landscape scrolling and touch passthrough; no game or native physics invoked"};
+        NSDictionary *report=@{@"passed":@(failures.count==0),@"failures":failures,@"scope":@"Simulator UIKit profile gating, panel actions, portrait/landscape scrolling, touch passthrough and retained failure JSON; no game or native physics invoked"};
         NSData *data=[NSJSONSerialization dataWithJSONObject:report options:NSJSONWritingPrettyPrinted error:nil];
         [data writeToFile:[NSTemporaryDirectory() stringByAppendingPathComponent:@"integrated-ui.json"] atomically:YES];
     });return YES;

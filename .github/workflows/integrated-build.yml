@@ -76,7 +76,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "integrated-${GITHUB_SHA:0:12}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title 'FanProMAX 内置 i5 · 自动诊断回传' --notes 'i5在i4基础上增加可配对的HTTPS诊断回传、启停开关、服务器回执和失败重试。地址及密钥需由用户在手机输入，不包含在此公开包中。每次启动默认关闭，仅游戏前台发送本模块诊断，不含远程命令。移动与飞车策略保持i4，实际三倍和稳定飞车仍未验证；不含自瞄与压枪。' out/integrated/*
+          gh release create "integrated-${GITHUB_SHA:0:12}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title 'FanProMAX 内置 i5.1 · 失败现场留存' --notes 'i5.1在i5自动回传基础上保留最近16次加速失败的原生前后读数及受指纹校验保护的最终曲线限速观测，避免失败后字段恢复与普通帧覆盖现场。此为诊断改进，移动与飞车控制策略未改变，实际三倍与稳定飞车未验证。不含自瞄、压枪或远程命令，公开包不含地址或密钥。' out/integrated/*
   ui:
     runs-on: macos-15-intel
     timeout-minutes: 25

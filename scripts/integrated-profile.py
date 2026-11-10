@@ -28,7 +28,9 @@ assert struct.unpack('<Q',read(0x7127e10+0x480,8))[0]&((1<<36)-1)==base+0x1c6cc9
 assert instructions(0x2300a78,20)==[('ldr','s0, [x0, #0xbf0]'),('ldr','s1, [x0, #0xbf8]'),('fsub','s1, s1, s0'),('fadd','s0, s0, s1'),('ret','')]
 assert ('bl','#0x102300a78') in instructions(0x1c6d384,20)
 assert ('fcsel','s9, s8, s0, ls') in instructions(0x1c6d384,20)
-entries=(0x2300a78,0x1c6d384,0x5057580,0x1c6cc90,0x59a0718,0x505566c,0x5517194,0x59a1a3c,0x59a1a00,0x59a4788,0x3b7804c)
+assert ('bl','#0x102300480') in instructions(0x1c6d314,20)
+assert ('ldr','x9, [x19, #0x22f0]') in instructions(0x2300480,0x13c)
+entries=(0x2300480,0x2300a78,0x1c6d384,0x5057580,0x1c6cc90,0x59a0718,0x505566c,0x5517194,0x59a1a3c,0x59a1a00,0x59a4788,0x3b7804c)
 lines=['#pragma once','#include "PortCore.hpp"','#include <cstring>','namespace fanpro {','inline bool verifyProfile(const nsport::Memory &m) {','unsigned char actual[32];']
 for n,rva in enumerate(entries):
  raw=read(rva,32);lines.append('static const unsigned char expected%d[]={%s};'%(n,','.join(hex(v) for v in raw)))

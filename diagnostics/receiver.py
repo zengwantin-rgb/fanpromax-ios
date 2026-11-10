@@ -24,7 +24,7 @@ profile_ready last_failure last_failure_time profile_error speed_requested selec
 speed_field_outcome flight_requested flight_outcome flight_motion_windows flight_calls
 flight_lease_active invincibility_implemented damage_reduction_implemented task_count
 speed_field_writes_confirmed walking_lease_active crouching_lease_active character_cap_lease_active
-measured_speed_multiplier_verified server_acceptance_verified aim_included recoil_included'''.split())
+measured_speed_multiplier_verified server_acceptance_verified aim_included recoil_included speed_failure_history'''.split())
 
 
 def bounded(value, depth=0):
