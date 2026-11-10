@@ -3,6 +3,7 @@
 #import <objc/runtime.h>
 #include "CollisionRuntimeRead.hpp"
 #include "FieldLease.hpp"
+#include "SpeedPolicyLease.hpp"
 #include "FlightLease.hpp"
 #include "LocalController.hpp"
 #include "VehicleTarget.hpp"
@@ -23,11 +24,11 @@ std::atomic<int> flightDirection{0};
 fanpro::FlightLease flightLease;
 NSString *flightOutcome=@"等待载具";
 uint64_t flightCalls{};
-bool restoringFields{};uint64_t writeRevision{};
+uint64_t writeRevision{};
 std::atomic<unsigned> speedTenths{10};
 std::atomic<bool> pendingTask{false};
 std::atomic<uint64_t> requestRevision{0};
-fanpro::FieldLease walkLease,crouchLease;
+fanpro::SpeedPolicyLease speedPolicy;
 uint64_t currentWorld{};
 NSString *lastOutcome=@"尚未修改";
 NSString *profileError;
@@ -47,10 +48,21 @@ static bool live(void *,const fanpro::Identity &key) {
 }
 static bool readFloat(void *,uint64_t address,float &value){return memory.get(address,value);}
 static bool writeFloat(void *,uint64_t address,float value) {
-    if(!restoringFields && (!speedRequested.load() || writeRevision!=requestRevision.load()))return false;
+    if(!speedRequested.load() || writeRevision!=requestRevision.load())return false;
+    return vm_write(mach_task_self(),address,reinterpret_cast<vm_offset_t>(&value),sizeof value)==KERN_SUCCESS;
+}
+static bool restoreFloat(void *,uint64_t address,float value) {
     return vm_write(mach_task_self(),address,reinterpret_cast<vm_offset_t>(&value),sizeof value)==KERN_SUCCESS;
 }
 fanpro::Access fieldAccess{nullptr,live,readFloat,writeFloat};
+fanpro::Access restoreAccess{nullptr,live,readFloat,restoreFloat};
+static bool nativeSpeed(void *,const fanpro::Identity &movement,const fanpro::Identity &character,float &value) {
+    if(!live(nullptr,movement) || !live(nullptr,character) || memory.pointer(movement.object+0x188)!=character.object)return false;
+    uint64_t table=memory.pointer(movement.object),getter=table ? memory.pointer(table+0x480) : 0;
+    if(table!=memory.base+0x7127e10 || getter!=memory.base+0x1c6cc90)return false;
+    value=reinterpret_cast<float (*)(void *)>(getter)(reinterpret_cast<void *>(movement.object));
+    return std::isfinite(value) && value>=0 && value<=10000;
+}
 static bool identity(uint64_t object,uint64_t world,fanpro::Identity &out) {
     struct Item {uint64_t reserved,object;uint32_t flags;int32_t serial;};
     std::array<uint32_t,3> words{};int32_t count{};
@@ -100,7 +112,7 @@ static const char *resultName(fanpro::FieldResult result) {
 static bool failed(fanpro::FieldResult result){return result!=fanpro::FieldResult::off && result!=fanpro::FieldResult::applied && result!=fanpro::FieldResult::unchanged;}
 static void record(NSString *phase) {
     if(!folder)return;
-    NSDictionary *value=@{@"version":@"integrated-i3.2-review",@"phase":phase,@"time":@(NSDate.date.timeIntervalSince1970),
+    NSDictionary *value=@{@"version":@"integrated-i4-review",@"phase":phase,@"time":@(NSDate.date.timeIntervalSince1970),
         @"context":contextDiagnostics?:@{},@"last_motion_window":lastMotionWindow?:@{},@"motion_windows":motionWindows?:@[],@"cleanup_outcome":cleanupOutcome,
         @"last_speed_write_time":@(lastSpeedWriteTime),@"local_verified_frames":@(localVerifiedFrames),
         @"character_ready_frames":@(characterReadyFrames),@"eligible_speed_frames":@(eligibleSpeedFrames),
@@ -110,7 +122,7 @@ static void record(NSString *phase) {
         @"flight_calls":@(flightCalls),@"flight_lease_active":@(flightLease.active()),
         @"invincibility_implemented":@NO,@"damage_reduction_implemented":@NO,
         @"task_count":@(taskCount),@"speed_field_writes_confirmed":@(speedWrites),
-        @"walking_lease_active":@(walkLease.active()),@"crouching_lease_active":@(crouchLease.active()),
+        @"walking_lease_active":@(speedPolicy.walkingActive()),@"crouching_lease_active":@(speedPolicy.crouchingActive()),@"character_cap_lease_active":@(speedPolicy.capActive()),
         @"measured_speed_multiplier_verified":@NO,@"server_acceptance_verified":@NO,
         @"aim_included":@NO,@"recoil_included":@NO};
     NSData *data=[NSJSONSerialization dataWithJSONObject:value options:NSJSONWritingPrettyPrinted error:nil];
@@ -138,7 +150,7 @@ static bool ownedCharacter(const local::LocalController &local,CollisionContext 
     return false;
 }
 static void perform(uint64_t revision) {
-    ++taskCount;cleanupOutcome=@"none";writeRevision=revision;restoringFields=false;CollisionContext target;
+    ++taskCount;cleanupOutcome=@"none";writeRevision=revision;CollisionContext target;
     const auto owner=local::readLocalController(memory);
     CollisionObservation observation;
     if(owner.verified)observation=observeCollision(memory,textBegin,textEnd,&target,owner.controller);
@@ -158,8 +170,8 @@ static void perform(uint64_t revision) {
     contextDiagnostics=details;
     if(!wanted) {
         if(owner.verified) {
-            restoringFields=true;auto a=walkLease.restore(fieldAccess),b=crouchLease.restore(fieldAccess);
-            cleanupOutcome=[NSString stringWithFormat:@"speed %s / %s",resultName(a),resultName(b)];
+            auto result=speedPolicy.restore(restoreAccess);
+            cleanupOutcome=[NSString stringWithFormat:@"speed %s",resultName(result)];
         } else cleanupOutcome=@"deferred_until_local_identity_returns";
         if(!speedRequested.load())lastOutcome=@"speed_disabled";
         else if(!owner.verified)lastOutcome=[@"waiting_local_player: " stringByAppendingString:@(owner.reason)];
@@ -169,13 +181,21 @@ static void perform(uint64_t revision) {
         ++eligibleSpeedFrames;
         fanpro::Identity key{target.movement,target.items[1],target.world,target.serials[1]};
         float multiplier=speedTenths.load()/10.0f;
-        auto a=walkLease.apply(fieldAccess,key,0x6dc,multiplier);
-        auto b=failed(a) ? fanpro::FieldResult::off : crouchLease.apply(fieldAccess,key,0x420,multiplier);
-        if(a==fanpro::FieldResult::applied)++speedWrites;
-        if(b==fanpro::FieldResult::applied)++speedWrites;
-        if(a==fanpro::FieldResult::applied || b==fanpro::FieldResult::applied)lastSpeedWriteTime=NSDate.date.timeIntervalSince1970;
-        lastOutcome=[NSString stringWithFormat:@"%s / %s",resultName(a),resultName(b)];
-        if(failed(a) || failed(b)) {lastFailure=[@"speed: " stringByAppendingString:lastOutcome];lastFailureTime=NSDate.date.timeIntervalSince1970;speedRequested.store(false);restoringFields=true;walkLease.restore(fieldAccess);crouchLease.restore(fieldAccess);record(@"speed_failure");}
+        fanpro::Identity actor{target.pawn,target.items[0],target.world,target.serials[0]};
+        auto result=speedPolicy.apply(fieldAccess,restoreAccess,key,actor,multiplier,nullptr,nativeSpeed);
+        speedWrites+=result.writes;
+        if(result.writes)lastSpeedWriteTime=NSDate.date.timeIntervalSince1970;
+        details[@"original_native_speed_cm_s"]=@(result.originalNative);
+        details[@"requested_native_speed_cm_s"]=@(result.expectedNative);
+        details[@"result_native_speed_cm_s"]=@(result.actualNative);
+        details[@"native_speed_ratio_verified"]=@(result.nativeRatioVerified);
+        details[@"native_speed_verification_scope"]=@"same-task original and modified client policy; not actual displacement or server acceptance";
+        lastOutcome=[NSString stringWithFormat:@"%s: %s",result.stage,resultName(result.result)];
+        if(failed(result.result)) {
+            lastFailure=[@"speed: " stringByAppendingString:lastOutcome];lastFailureTime=NSDate.date.timeIntervalSince1970;
+            speedRequested.store(false);auto cleanup=speedPolicy.restore(restoreAccess);
+            cleanupOutcome=[NSString stringWithFormat:@"speed %s / %s",resultName(result.cleanup),resultName(cleanup)];record(@"speed_failure");
+        }
     }
     // Keep the same end-of-window observation with historical motion, including after entering a vehicle.
     if(valid) {
@@ -266,7 +286,7 @@ static void perform(uint64_t revision) {
         self.card=[UIScrollView new];self.card.backgroundColor=[UIColor colorWithWhite:0.06 alpha:0.95];self.card.layer.cornerRadius=16;self.card.hidden=YES;
         [self.card addSubview:self.content];[self addSubview:self.card];[self bringSubviewToFront:self.launcher];
         UILabel *(^label)(NSString *)=^UILabel *(NSString *text){UILabel *l=[UILabel new];l.text=text;l.textColor=UIColor.whiteColor;l.numberOfLines=0;l.font=[UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];l.adjustsFontForContentSizeCategory=YES;return l;};
-        [self.content addArrangedSubview:label(@"FanProMAX · 内置核查 i3.2")];
+        [self.content addArrangedSubview:label(@"FanProMAX · 内置试验 i4")];
         UIStackView *row=[UIStackView new];row.axis=UILayoutConstraintAxisHorizontal;row.distribution=UIStackViewDistributionEqualSpacing;
         [row addArrangedSubview:label(@"人物加速（待实测）")];self.speed=[UISwitch new];self.speed.enabled=ready;
         [self.speed addTarget:self action:@selector(speedChanged:) forControlEvents:UIControlEventValueChanged];[row addArrangedSubview:self.speed];

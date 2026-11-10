@@ -26,7 +26,7 @@ jobs:
           test "$RUNNER_ENVIRONMENT" = github-hosted
           mkdir -p build out/integrated
           set -o pipefail
-          for test_name in field flight motion; do
+          for test_name in field flight motion speed_policy; do
             xcrun clang++ -std=c++17 -Wall -Wextra -Werror -UNDEBUG -fsanitize=address,undefined -Iapps/Integrated "tests/integrated_${test_name}_tests.cpp" -o "build/integrated-${test_name}-tests"
             "build/integrated-${test_name}-tests" | tee "out/integrated/${test_name}-tests.txt"
           done
@@ -44,8 +44,9 @@ jobs:
       - name: Validate profile, compile, sign and verify module
         run: |
           python3 -m venv build/integrated-venv
-          build/integrated-venv/bin/python -m pip install --only-binary=:all: capstone==5.0.6
+          build/integrated-venv/bin/python -m pip install --only-binary=:all: capstone==5.0.6 unicorn==2.1.2
           build/integrated-venv/bin/python scripts/integrated-profile.py input/NEW_STATE_Decrypted.ipa
+          build/integrated-venv/bin/python diagnostics/speed-cap-emulation.py input/NEW_STATE_Decrypted.ipa
           module_sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
           xcrun --sdk iphoneos clang++ -arch arm64 -isysroot "$module_sdk" -miphoneos-version-min=17.0 -std=c++17 -O2 -Wall -Wextra -Werror -fobjc-arc -fblocks -fvisibility=hidden -Isrc -Iapps/Integrated -Ibuild -dynamiclib src/PortCore.cpp apps/Integrated/CollisionProbe.cpp apps/Integrated/Runtime.mm -framework UIKit -framework Foundation -framework CoreGraphics -Wl,-dead_strip -Wl,-install_name,@executable_path/Frameworks/FanProIntegrated.dylib -o out/integrated/FanProIntegrated.dylib
           codesign --force --sign - --timestamp=none --pagesize 4096 out/integrated/FanProIntegrated.dylib
@@ -62,13 +63,14 @@ jobs:
           path: |
             out/integrated/*-tests.txt
             out/integrated/profile-report.json
+            out/integrated/speed-cap-emulation.json
           if-no-files-found: error
       - name: Stage verified game package as private draft
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_candidate }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "integrated-${GITHUB_SHA:0:12}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title 'FanProMAX 内置 i3.2 · 诊断核查候选' --notes 'i3.2补即时速度回读、游戏重力冲突检查及历史窗口末尾的限速观测。实际三倍速度、稳定飞车与回拉问题仍未解决；人物飞天、无敌与减伤未实现，不含自瞄与压枪。仅在显式选择发布时生成手机候选包。' out/integrated/*
+          gh release create "integrated-${GITHUB_SHA:0:12}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title 'FanProMAX 内置 i4 · 客户端速度策略试验' --notes 'i4同时处理已确认的步行速度字段和角色独立速度上限，并用原生最终速度函数核对同一任务中的修改前后比例。不符合目标比例时恢复。实际三倍速度、稳定飞车与回拉问题仍未解决；人物飞天、无敌与减伤未实现，不含自瞄与压枪。仅在显式选择发布时生成手机候选包。' out/integrated/*
   ui:
     runs-on: macos-15-intel
     timeout-minutes: 25
