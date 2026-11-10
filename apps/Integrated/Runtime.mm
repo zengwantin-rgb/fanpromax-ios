@@ -365,6 +365,7 @@ static void perform(uint64_t revision) {
 - (void)foreground {[FanProDiagnosticUpload.shared setForeground:YES];}
 - (void)background {[FanProDiagnosticUpload.shared setForeground:NO];speedRequested.store(false);flightRequested.store(false);++requestRevision;self.speed.on=NO;self.flight.on=NO;[self tick];}
 - (void)tick {
+    [FanProDiagnosticUpload.shared poll];
     self.upload.on=FanProDiagnosticUpload.shared.enabled;self.uploadStatus.text=FanProDiagnosticUpload.shared.status;
     if(!ready || pendingTask.exchange(true))return;
     Class cls=objc_getClass("FIOSAsyncTask");
@@ -384,7 +385,8 @@ static void perform(uint64_t revision) {
     [alert addTextFieldWithConfigurationHandler:^(UITextField *field){field.placeholder=@"https://…/v1/diagnostics#密钥";field.secureTextEntry=YES;field.autocapitalizationType=UITextAutocapitalizationTypeNone;field.autocorrectionType=UITextAutocorrectionTypeNo;}];
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"解除配对" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action){(void)action;[FanProDiagnosticUpload.shared forgetPairing];}]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){(void)action;[FanProDiagnosticUpload.shared configurePairing:alert.textFields.firstObject.text];}]];
+    __weak UIAlertController *weakAlert=alert;
+    [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){(void)action;[FanProDiagnosticUpload.shared configurePairing:weakAlert.textFields.firstObject.text];weakAlert.textFields.firstObject.text=@"";}]];
     [controller presentViewController:alert animated:YES completion:nil];
 }
 - (void)share {

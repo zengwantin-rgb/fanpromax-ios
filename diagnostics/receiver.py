@@ -1,5 +1,6 @@
 """Authenticated, write-only diagnostic receiver. No device control or public log API."""
 import argparse
+from contextlib import contextmanager
 import hashlib
 import hmac
 import json
@@ -69,8 +70,14 @@ class Store:
             db.execute('CREATE TABLE IF NOT EXISTS reports (id TEXT PRIMARY KEY, received REAL, body BLOB)')
             db.execute('CREATE INDEX IF NOT EXISTS received_index ON reports(received)')
 
+    @contextmanager
     def connect(self):
-        return sqlite3.connect(self.folder/'reports.sqlite3')
+        db = sqlite3.connect(self.folder/'reports.sqlite3')
+        try:
+            with db:
+                yield db
+        finally:
+            db.close()
 
     def expire(self):
         with self.lock, self.connect() as db:

@@ -103,12 +103,12 @@ class ReceiverTests(unittest.TestCase):
         doc = self.body()
         self.store.add(doc)
         self.store.add(doc)
-        with sqlite3.connect(Path(self.temp.name)/'reports.sqlite3') as db:
+        with self.store.connect() as db:
             self.assertEqual(db.execute('SELECT count(*) FROM reports').fetchone()[0], 1)
             self.assertEqual(json.loads(zlib.decompress(db.execute('SELECT body FROM reports').fetchone()[0])), doc)
             db.execute('UPDATE reports SET received=0')
         self.store.add(self.body())
-        with sqlite3.connect(Path(self.temp.name)/'reports.sqlite3') as db:
+        with self.store.connect() as db:
             self.assertEqual(db.execute('SELECT count(*) FROM reports').fetchone()[0], 1)
 
 

@@ -80,6 +80,7 @@
     if(!snapshot.length || snapshot.length>450*1024)return;
     self.latest=[snapshot copy];[self pump];
 }
+- (void)poll {[self pump];}
 - (void)forgetPairing {
     [self setUploading:NO];SecItemDelete((__bridge CFDictionaryRef)[self keychainQuery]);
     self.pairing=nil;self.configured=NO;self.latest=nil;self.status=@"已解除配对";

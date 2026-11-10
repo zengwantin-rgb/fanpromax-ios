@@ -51,7 +51,11 @@ int main(){@autoreleasepool {
     mode=@"large";[u setValue:@0 forKey:@"nextAttempt"];[u offerSnapshot:snapshot];finish(u);check([u.status hasPrefix:@"未收到有效回执"],"bounded response");
     mode=@"denied";[u setValue:@0 forKey:@"nextAttempt"];[u offerSnapshot:snapshot];finish(u);check(!u.enabled,"invalid credential disables upload");
     __block BOOL deniedRedirect=NO;
-    [u URLSession:session task:nil willPerformHTTPRedirection:nil newRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:@"https://elsewhere.invalid"]] completionHandler:^(NSURLRequest *request){deniedRedirect=request==nil;}];
+    NSURL *redirectURL=[NSURL URLWithString:@"https://elsewhere.invalid"];
+    NSURLSessionDataTask *redirectTask=[session dataTaskWithURL:redirectURL];
+    NSHTTPURLResponse *redirectResponse=[[NSHTTPURLResponse alloc] initWithURL:redirectURL statusCode:302 HTTPVersion:@"HTTP/1.1" headerFields:@{}];
+    [u URLSession:session task:redirectTask willPerformHTTPRedirection:redirectResponse newRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:@"https://elsewhere.invalid"]] completionHandler:^(NSURLRequest *request){deniedRedirect=request==nil;}];
+    [redirectTask cancel];
     check(deniedRedirect,"no credentials forwarded through redirects");
     [session invalidateAndCancel];puts("PASS: pairing, no unsolicited transmission, authenticated payload, ACK identity, throttle, background pause, bounded replies and redirect refusal");
 }return 0;}

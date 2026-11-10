@@ -11,5 +11,6 @@
 - (void)setUploading:(BOOL)enabled;
 - (void)setForeground:(BOOL)foreground;
 - (void)offerSnapshot:(NSData *)snapshot;
+- (void)poll;
 - (void)forgetPairing;
 @end
