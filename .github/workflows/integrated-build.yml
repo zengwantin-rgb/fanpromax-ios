@@ -44,7 +44,7 @@ jobs:
       - name: Validate profile, compile, sign and verify module
         run: |
           python3 -m venv build/integrated-venv
-          build/integrated-venv/bin/python -m pip install --only-binary=:all: capstone==5.0.6 unicorn==2.1.2
+          build/integrated-venv/bin/python -m pip install --only-binary=:all: capstone==5.0.6 unicorn==2.1.4
           build/integrated-venv/bin/python scripts/integrated-profile.py input/NEW_STATE_Decrypted.ipa
           build/integrated-venv/bin/python diagnostics/speed-cap-emulation.py input/NEW_STATE_Decrypted.ipa
           module_sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
