@@ -1,0 +1,40 @@
+name: Check diagnostic receiver deployment
+on:
+  workflow_dispatch:
+    inputs:
+      probe_deployment:
+        description: Check the configured HTTPS receiver with synthetic data only
+        type: boolean
+        default: false
+  push:
+    branches: [analysis/integrated-controls]
+    paths: [diagnostics/receiver*.py, tests/diagnostic_*, apps/Integrated/DiagnosticUpload.*, .github/workflows/diagnostic-receiver.yml]
+permissions:
+  contents: read
+jobs:
+  receiver:
+    runs-on: macos-15-intel
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Test receiver and uploader with synthetic data
+        run: |
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          mkdir -p build
+          python3 tests/diagnostic_receiver_tests.py
+          xcrun clang++ -std=c++17 -Wall -Wextra -Werror -fobjc-arc -fblocks -Iapps/Integrated apps/Integrated/DiagnosticUpload.mm tests/diagnostic_upload_tests.mm -framework Foundation -framework Security -o build/diagnostic-upload-tests
+          build/diagnostic-upload-tests
+      - name: Probe the deployed receiver
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.probe_deployment }}
+        env:
+          DIAGNOSTIC_ENDPOINT: ${{ secrets.DIAGNOSTIC_ENDPOINT }}
+          DIAGNOSTIC_PROBE_TOKEN: ${{ secrets.DIAGNOSTIC_PROBE_TOKEN }}
+        run: python3 diagnostics/receiver-probe.py
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.probe_deployment }}
+        with:
+          name: diagnostic-receiver-${{ github.sha }}
+          path: out/receiver/receiver-probe.json
+          if-no-files-found: error
