@@ -7,7 +7,7 @@ from warning_dispatch_patch import layout
 from capstone import Cs,CS_ARCH_ARM64,CS_MODE_ARM
 with zipfile.ZipFile(sys.argv[1]) as z:data=z.read('Payload/ExtremeGame.app/ExtremeGame')
 assert hashlib.sha256(data).hexdigest()=='cf59f3663bba56b035024e71d814ffceecf86d5d99bd90873c2fd82372e3a0c7'
-_,segments,_=layout(data);base=0x100000000
+_,segments,sections=layout(data);base=0x100000000
 cursor=32;starts=[]
 for _ in range(struct.unpack_from('<I',data,16)[0]):
  command,length=struct.unpack_from('<II',data,cursor)
@@ -33,4 +33,22 @@ for rva in roots:
  name=hex(rva)[2:]+'.asm'
  (out/name).write_text('\n'.join(hex(i.address-base)+': '+i.mnemonic+' '+i.op_str for i in instructions)+'\n')
  functions.append({'rva':hex(rva),'bytes':size,'extent_kind':'function_starts' if exact else 'bounded_context_not_proven_function_extent','file':name,'sha256':hashlib.sha256(data[offset:offset+size]).hexdigest()})
+# Find direct unsigned-offset references; object type is not inferred from an offset.
+references=[]
+for section in sections:
+ if section['name']!='__text':continue
+ raw=data[section['offset']:section['offset']+section['size']]
+ for index,(word,) in enumerate(struct.iter_unpack('<I',raw[:len(raw)//4*4])):
+  if word & 0x3b000000 != 0x39000000:continue
+  scale=(word>>30)&3
+  if ((word>>10)&4095)*(1<<scale) not in (0xbf0,0xbf8):continue
+  pc=section['address']-base+index*4
+  decoded=list(md.disasm(raw[index*4:index*4+4],base+pc))
+  if not decoded or not any(v in decoded[0].op_str for v in ('#0xbf0]', '#0xbf8]')):continue
+  instruction=decoded[0]
+  begin=max(0,index*4-256);end=min(len(raw),index*4+260)
+  filename='reference-'+hex(pc)[2:]+'.asm'
+  (out/filename).write_text('\n'.join(hex(i.address-base)+': '+i.mnemonic+' '+i.op_str for i in md.disasm(raw[begin:end],section['address']+begin))+'\n')
+  references.append({'pc':hex(pc),'instruction':instruction.mnemonic+' '+instruction.op_str,'context':filename,'object_identity_proven':False})
+(out/'field-references.json').write_text(json.dumps(references,indent=2)+'\n')
 (out/'ios-report.json').write_text(json.dumps({'functions':functions,'input_executed':False,'runtime_cap_value_known':False,'server_behavior_verified':False},indent=2)+'\n')
